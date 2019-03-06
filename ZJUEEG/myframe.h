@@ -19,6 +19,7 @@ public:
                       int amplititude_scale, int time_scale,
                       Qt::GlobalColor lineColor,
                       double min, double max, double rms,
+                      QVector<qint8>& mark,
                       bool leadoff_p = false, bool leadoff_n = false);
     void refreshPixmap();
 protected:
@@ -37,6 +38,7 @@ private:
     QPointF* polyline;
     QPointF* polyline_2;
     QPointF polyline_first;
+    bool mark0;//存储上一次绘图终点mark值
     bool has_data_to_draw;
     double x_interval;//ms  每两个点的间距
     double y_scale;//uV

@@ -1,11 +1,12 @@
 #ifndef SIGNALPROCESS_H
 #define SIGNALPROCESS_H
 
-#include<QVector>
+#include <QVector>
+#include "Iir.h"  //use external library from github
 
 #define PI  3.14159265359
 
-
+const int order = 14; // 4th order (=2 biquads)
 
 class SignalProcess
 {
@@ -49,6 +50,41 @@ private:
     void calculateRMS(QVector<QVector<double>>& data_in);//计算均方根值
     void allocateSpaceForVector2D(QVector<QVector<double>>& vector, int first_size,int second_size);
     void fillVectorDoubleZero(QVector<QVector<double>>& vector);
+
+    //实例化滤波器，填充滤波器容器,这里按32处理。
+    //注：不可使用容器存储实例化对象，否则出现SIGSEGV错误
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter0;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter1;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter2;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter3;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter4;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter5;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter6;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter7;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter8;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter9;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter10;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter11;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter12;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter13;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter14;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter15;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter16;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter17;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter18;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter19;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter20;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter21;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter22;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter23;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter24;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter25;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter26;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter27;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter28;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter29;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter30;
+    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter31;
 
 };
 

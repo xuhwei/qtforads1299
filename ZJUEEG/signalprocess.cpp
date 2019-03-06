@@ -161,8 +161,91 @@ void SignalProcess::runNotchFilter(QVector<QVector <double>>& data_in)
             y0_y1_notch[channel][1] = y_notch[channel][per_channel_data_number-1];//y[n-1]
         }
 }
-
-
+/************ 带通  ********
+ *
+ *
+ */
+void SignalProcess::setBandFilter(double sampleRate, bool bandEnable, double fl,double fh)
+{  
+    if(fl<fh)
+        band_enable = bandEnable;
+    else
+        band_enable = false;
+    if(band_enable){
+        double center_frequency = (fh+fl)/2.0; // Hz
+        double width_freuency = fh-fl;//Hz
+        bp_filter0.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter1.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter2.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter3.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter4.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter5.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter6.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter7.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter8.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter9.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter10.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter11.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter12.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter13.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter14.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter15.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter16.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter17.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter18.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter19.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter20.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter21.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter22.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter23.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter24.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter25.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter26.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter27.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter28.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter29.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter30.setup(sampleRate,center_frequency,width_freuency);
+        bp_filter31.setup(sampleRate,center_frequency,width_freuency);
+    }
+}
+void SignalProcess::runBandFilter(QVector<QVector <double>>& data_in)
+{
+    for(int i=0; i<per_channel_data_number; ++i){
+        y_band[0][i] = bp_filter0.filter(data_in[0][i]);
+        y_band[1][i] = bp_filter1.filter(data_in[1][i]);
+        y_band[2][i] = bp_filter2.filter(data_in[2][i]);
+        y_band[3][i] = bp_filter3.filter(data_in[3][i]);
+        y_band[4][i] = bp_filter4.filter(data_in[4][i]);
+        y_band[5][i] = bp_filter5.filter(data_in[5][i]);
+        y_band[6][i] = bp_filter6.filter(data_in[6][i]);
+        y_band[7][i] = bp_filter7.filter(data_in[7][i]);
+        y_band[8][i] = bp_filter8.filter(data_in[8][i]);
+        y_band[9][i] = bp_filter9.filter(data_in[9][i]);
+        y_band[10][i] = bp_filter10.filter(data_in[10][i]);
+        y_band[11][i] = bp_filter11.filter(data_in[11][i]);
+        y_band[12][i] = bp_filter12.filter(data_in[12][i]);
+        y_band[13][i] = bp_filter13.filter(data_in[13][i]);
+        y_band[14][i] = bp_filter14.filter(data_in[14][i]);
+        y_band[15][i] = bp_filter15.filter(data_in[15][i]);
+        y_band[16][i] = bp_filter16.filter(data_in[16][i]);
+        y_band[17][i] = bp_filter17.filter(data_in[17][i]);
+        y_band[18][i] = bp_filter18.filter(data_in[18][i]);
+        y_band[19][i] = bp_filter19.filter(data_in[19][i]);
+        y_band[20][i] = bp_filter20.filter(data_in[20][i]);
+        y_band[21][i] = bp_filter21.filter(data_in[21][i]);
+        y_band[22][i] = bp_filter22.filter(data_in[22][i]);
+        y_band[23][i] = bp_filter23.filter(data_in[23][i]);
+        y_band[24][i] = bp_filter24.filter(data_in[24][i]);
+        y_band[25][i] = bp_filter25.filter(data_in[25][i]);
+        y_band[26][i] = bp_filter26.filter(data_in[26][i]);
+        y_band[27][i] = bp_filter27.filter(data_in[27][i]);
+        y_band[28][i] = bp_filter28.filter(data_in[28][i]);
+        y_band[29][i] = bp_filter29.filter(data_in[29][i]);
+        y_band[30][i] = bp_filter30.filter(data_in[30][i]);
+        y_band[31][i] = bp_filter31.filter(data_in[31][i]);
+    }
+}
+/*
 void SignalProcess::setBandFilter(double sampleRate, bool bandEnable, double fl,double fh)
 {
     if(fl<fh)
@@ -182,13 +265,13 @@ void SignalProcess::setBandFilter(double sampleRate, bool bandEnable, double fl,
     b1_band = 0;
     b2_band = -b0_band;
 
-    /*
-    b0_band = 0.243255495981982;
-    b1_band = 0;
-    b2_band = -b0_band;
-    a1_band = -1.510402314455435;
-    a2_band = 0.513489008036035;
-    */
+
+    //b0_band = 0.243255495981982;
+    //b1_band = 0;
+    //b2_band = -b0_band;
+    //a1_band = -1.510402314455435;
+    //a2_band = 0.513489008036035;
+
 }
 
 void SignalProcess::runBandFilter(QVector<QVector <double>>& data_in)
@@ -221,6 +304,7 @@ void SignalProcess::runBandFilter(QVector<QVector <double>>& data_in)
             y0_y1_band[channel][1] = y_band[channel][per_channel_data_number-1];//y[n-1]
         }
 }
+*/
 
 /************ 高通滤波  ********
  * 一阶 IIR 滤波

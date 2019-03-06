@@ -44,6 +44,7 @@ MainWindow::MainWindow(QWidget *parent) :
     }
     elect_off_p.resize(channel_number);
     elect_off_n.resize(channel_number);
+    mark.resize(per_channel_number);
     //初始化绘图部件容器
     initVectorDrawFrame();
     initVectorQCheckBox();
@@ -327,7 +328,8 @@ void MainWindow::run_m(){
         if(runFileData){
             QMessageBox::information(this,"","将使用选中文件内数据绘图");
             while(running){
-                unsigned int numberToRead = (4 + channel_number*4 +8)*per_channel_number;
+                //读取依次为 4字节编号，4字节冗余（最后一个bit为mark），32*4字节通道数据，8字节电极脱落数据
+                unsigned int numberToRead = (4 + 4 + channel_number*4 +8)*per_channel_number;
                 char _32_channel_data[numberToRead];
                 if(numberToRead != readFile->read(_32_channel_data,numberToRead)){
                     QMessageBox::information(this,"","读取结束");
@@ -344,9 +346,9 @@ void MainWindow::run_m(){
                     //读取数据
                     QQueue<bool> elect_off_bool;
                     for(int j = 0; j< per_channel_number ;++j){
-                        //8字节共计64bit 转为64个布尔值
+                        //处理电极脱落部分，8字节共计64bit 转为64个布尔值
                         for(int _8byte = 0; _8byte<8; ++_8byte){
-                            unsigned char byte = (unsigned char)_32_channel_data[(4 + channel_number*4 +8)*j + 4 + channel_number*4 + _8byte];
+                            unsigned char byte = (unsigned char)_32_channel_data[(4 + 4 + channel_number*4 +8)*j + 4 + 4 + channel_number*4 + _8byte];
                             elect_off_bool.append(byte&0x01);
                             elect_off_bool.append(byte&0x02);
                             elect_off_bool.append(byte&0x04);
@@ -357,16 +359,17 @@ void MainWindow::run_m(){
                             elect_off_bool.append(byte&0x80);
                         }
                         for(int channel = 0; channel<channel_number; ++channel){
-                            int r3  = (unsigned char)_32_channel_data[j*(channel_number*4+12)+channel*4+7];
-                            r3 = (r3<<8) + (unsigned char)_32_channel_data[j*(channel_number*4+12)+channel*4+6];
-                            r3 = (r3<<8) + (unsigned char)_32_channel_data[j*(channel_number*4+12)+channel*4+5];
-                            r3 = (r3<<8) + (unsigned char)_32_channel_data[j*(channel_number*4+12)+channel*4+4];
-                            data[channel][j] = ((double)r3 - 2000.0)/24.0;
+                            int perchannel_data = (_32_channel_data[j*(channel_number*4+16)+8+channel*4]&0x000000FF)|
+                                                 ((_32_channel_data[j*(channel_number*4+16)+8+channel*4+1]&0x000000FF)<<8)|
+                                                 ((_32_channel_data[j*(channel_number*4+16)+8+channel*4+2]&0x000000FF)<<16)|
+                                                 ((_32_channel_data[j*(channel_number*4+16)+8+channel*4+3]&0x000000FF)<<24);
+                            data[channel][j] = ((double)perchannel_data)/24.0;//增益24
                             elect_off_p[channel] =  elect_off_p[channel]|| elect_off_bool.front();
                             elect_off_bool.pop_front();
                             elect_off_n[channel_number - channel - 1] =  elect_off_n[channel_number - channel - 1]|| elect_off_bool.back();
                             elect_off_bool.pop_back();
                         }
+                        mark[j] = _32_channel_data[(4 + 4 + channel_number*4 +8)*per_channel_number + 7];
                     }
 
                     dataProcess->runProcess(data);
@@ -376,6 +379,7 @@ void MainWindow::run_m(){
                                                                  ampli_scale, time_scale,
                                                                  channel%2 ? Qt::red : Qt::blue,
                                                                  dataProcess->min[channel],dataProcess->max[channel],dataProcess->rms[channel],
+                                                                 mark,
                                                                  elect_off_p[channel],elect_off_n[channel])
                                     <0){
                                 stop_m();
@@ -397,6 +401,10 @@ void MainWindow::run_m(){
                     data[i][j] = y;
                 }
             }
+            for(int i = 0; i<per_channel_number; ++i){
+                mark[i] = 0;
+            }
+            mark[(int)per_channel_number/2] = 1;
 
             while(running){
                 dataProcess->runProcess(data);
@@ -406,8 +414,9 @@ void MainWindow::run_m(){
                                                              ampli_scale, time_scale,
                                                              channel%2 ? Qt::red : Qt::blue,
                                                              dataProcess->min[channel],dataProcess->max[channel],dataProcess->rms[channel],
-                                                             channel%2 ? true:false, false)
-                                <0){
+                                                             mark,
+                                                             channel%2 ? true:false, false)<0)
+                        {
                             stop_m();
                             break;
                         }
@@ -449,6 +458,8 @@ void MainWindow::run_m(){
                          elect_off_n[channel] = elect_off_n[channel] || tcp->elect_lead_off.front();
                          tcp->elect_lead_off.pop_front();
                      }
+                     mark[i] = tcp->mark.front();
+                     tcp->mark.pop_front();
                  }
 
                  dataProcess->runProcess(data);
@@ -458,6 +469,7 @@ void MainWindow::run_m(){
                                                               ampli_scale, time_scale,
                                                               channel%2 ? Qt::red : Qt::blue ,
                                                               dataProcess->min[channel],dataProcess->max[channel],dataProcess->rms[channel],
+                                                              mark,
                                                               elect_off_p[channel], elect_off_n[channel])
                                  <0){
                              stop_m();

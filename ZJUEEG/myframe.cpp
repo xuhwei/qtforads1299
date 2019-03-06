@@ -11,6 +11,7 @@ myframe::myframe(QWidget *parent):QWidget(parent)
     pen_pos_x = 5;//画笔当前位置
     pen_pos_y = 5;
     polyline_first = QPointF(pen_pos_x,pen_pos_y);
+    mark0 = false;
 }
 
 //myframe::~myframe(){
@@ -38,6 +39,7 @@ int myframe::hasDataToDraw(double sample_rate, QVector<double>& singlechannel_da
                            int amplititude_scale, int time_scale,
                            Qt::GlobalColor lineColor,
                            double min, double max , double rms,
+                           QVector<qint8>& mark,
                            bool leadoff_p, bool leadoff_n)
 {
     //qDebug("hadDatoToDraw");
@@ -49,11 +51,13 @@ int myframe::hasDataToDraw(double sample_rate, QVector<double>& singlechannel_da
     if(length<2){
         qDebug("the number of data is less than 2");
         return -1;
-    }
+    }   
     height = this->frameGeometry().height();//画布高
     width = this->frameGeometry().width();//画布宽
 
     polyline = new QPointF[length + 1];//需要和上一次绘图点连接，所以从上一次绘图最后一点开始绘图
+    QVector<double> xposition;
+    xposition.resize(length + 1);
 
     x_interval=1000.0/sample_rate;//ms
     y_scale= (double)amplititude_scale;
@@ -86,10 +90,10 @@ int myframe::hasDataToDraw(double sample_rate, QVector<double>& singlechannel_da
         }
         //分右边和左边两个擦除矩阵
         start_point_right = start_point;
-        end_point_right = width-10;
-        start_point_left = 5.0;
-        end_point_left = 5.0+ (length + 1 - remain_point)*x_among_two_point;
+        end_point_right = width;
         //左边擦除矩形
+        start_point_left = 5.0;
+        end_point_left = 5.0+ (length + 1 - remain_point)*x_among_two_point;       
         eraseBlock.setLeft(start_point_left);
         eraseBlock.setRight(end_point_left);
         painter.eraseRect(eraseBlock);
@@ -106,9 +110,11 @@ int myframe::hasDataToDraw(double sample_rate, QVector<double>& singlechannel_da
     if(end_point < width-10)
     {
         polyline[0] = polyline_first;
+        xposition[0] = polyline_first.x();
         for(int i = 1; i<length + 1 ;i++)
         {
             next_x = pen_pos_x + x_among_two_point;
+            xposition[i] = next_x;
             //qDebug("height = %d",height);
             next_y = (double)(height/2) -  singlechannel_data[i-1]/y_perScale;
             polyline[i] = QPointF(next_x,next_y);
@@ -124,9 +130,11 @@ int myframe::hasDataToDraw(double sample_rate, QVector<double>& singlechannel_da
     {   //分右边和左边两部分画图
         //右边
         polyline[0] = polyline_first;
+        xposition[0] = polyline_first.x();
         for(int i = 1; i<remain_point; i++)
         {
             next_x = pen_pos_x + x_among_two_point;
+            xposition[i] = next_x;
             next_y = (double)(height/2) -  singlechannel_data[i-1]/y_perScale;
             polyline[i] = QPointF(next_x,next_y);
             pen_pos_x = next_x;
@@ -135,7 +143,7 @@ int myframe::hasDataToDraw(double sample_rate, QVector<double>& singlechannel_da
         painter.drawPolyline(polyline, remain_point);
 
 
-        //左边； 左边第一个点会重复绘制右边最后一个点
+        //左边； 左边第一个点会重复绘制右边最后一个点.注：mark并不会再重复右边最后一个点
         polyline_2 = new QPointF[length + 2 - remain_point];
         polyline_first = QPointF(5,pen_pos_y);
         pen_pos_x = 5.0;
@@ -143,6 +151,7 @@ int myframe::hasDataToDraw(double sample_rate, QVector<double>& singlechannel_da
         for(int i = 1; i<length + 2 - remain_point; i++)
         {
             next_x = pen_pos_x + x_among_two_point;
+            xposition[remain_point-1+i] = next_x;
             next_y = (double)(height/2) -  singlechannel_data[remain_point-2+i]/y_perScale;
             polyline_2[i] = QPointF(next_x,next_y);
             pen_pos_x = next_x;
@@ -153,6 +162,21 @@ int myframe::hasDataToDraw(double sample_rate, QVector<double>& singlechannel_da
         delete [] polyline_2;
         polyline_first = QPointF(pen_pos_x,pen_pos_y);
     }
+    //Draw mark , number of point this time  ,plus last point in last drawing
+    painter.setPen(Qt::red);
+    if(mark0) {
+        painter.drawEllipse(xposition[0],height-10,4,4);
+        painter.drawEllipse(xposition[0],10,4,4);
+        painter.drawLine(QPoint(xposition[0]+2,height-10),QPoint(xposition[0]+2,14));
+    }
+    for(int i = 1; i<length+1; ++i){
+        if(mark[i-1]&0x01){
+            painter.drawEllipse(xposition[i],height-10,4,4);
+            painter.drawEllipse(xposition[i],10,4,4);
+            painter.drawLine(QPoint(xposition[i]+2,height-10),QPoint(xposition[i]+2,14));
+        }
+    }
+    mark0 = mark[length-1]&0x01;
     // Draw min max rms text
     painter.setPen(Qt::darkGreen);
     eraseBlock.setLeft(width-360);

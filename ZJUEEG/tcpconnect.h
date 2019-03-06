@@ -33,8 +33,10 @@ public:
      QTcpSocket *client;
      QTcpServer *server;
 
+     QQueue<qint8> mark;
      QQueue<double> data_from_wifi;
      QQueue<bool> elect_lead_off;
+
      bool startBoard;
 
 private:

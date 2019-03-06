@@ -17,11 +17,36 @@ SOURCES += main.cpp\
         mainwindow.cpp \
     myframe.cpp \
     signalprocess.cpp \
-    tcpconnect.cpp
+    tcpconnect.cpp \
+    Biquad.cpp \
+    Butterworth.cpp \
+    Cascade.cpp \
+    ChebyshevI.cpp \
+    ChebyshevII.cpp \
+    Custom.cpp \
+    draw.cpp \
+    PoleFilter.cpp \
+    RBJ.cpp \
+    State.cpp
 
 HEADERS  += mainwindow.h \
     myframe.h \
     signalprocess.h \
-    tcpconnect.h
+    tcpconnect.h \
+    Iir.h \
+    Biquad.h \
+    Butterworth.h \
+    Cascade.h \
+    ChebyshevI.h \
+    ChebyshevII.h \
+    Common.h \
+    Custom.h \
+    draw.h \
+    Layout.h \
+    MathSupplement.h \
+    PoleFilter.h \
+    RBJ.h \
+    State.h \
+    Types.h
 
 FORMS    += mainwindow.ui

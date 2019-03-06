@@ -27,6 +27,7 @@ public:
     QVector<QVector<double>> data;
     QVector<bool> elect_off_p;
     QVector<bool> elect_off_n;
+    QVector<qint8> mark;
 
 protected:
     void closeEvent( QCloseEvent * event);

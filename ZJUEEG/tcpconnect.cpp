@@ -150,19 +150,23 @@ void TcpConnect::server_tcpReadData(){
 
 
         wifiBuffer.append(tmpdata);
-        while(wifiBuffer.size()>(4+4*32+8)){
-            //移除前4个字节标记
-            wifiBuffer.left(4);
+        //4字节序号，4字节冗余（最后1bit为mark），每通道4字节数据（共32通道）,8字节电极脱落数据
+        while(wifiBuffer.size()>(4+4+4*32+8)){
+            //移除前4个字节序号标记
             wifiBuffer.remove(0,4);
+            //移除前3个字节冗余
+            wifiBuffer.remove(0,3);
+            //获取一个字节，目前仅8bit中的最低位代表标记信息，1有效，其他位均为0，即不做处理
+            bool ok;
+            qint8 mark_tmp = wifiBuffer.left(1).toHex().toInt(&ok,16);
+            wifiBuffer.remove(0,1);
+            mark.append(mark_tmp);
             //填充32通道数据
             for(int channel = 0 ; channel<32; ++channel){
                 QByteArray _4byte =  wifiBuffer.left(4);//取4个字节
                 wifiBuffer.remove(0,4);//从buffer中删去读取的4个字节
-                int r3  = (unsigned char)_4byte[3];
-                r3 = (r3<<8) + (unsigned char)_4byte[2];
-                r3 = (r3<<8) + (unsigned char)_4byte[1];
-                r3 = (r3<<8) + (unsigned char)_4byte[0];
-                double r4 = ((double)r3 - 2000.0)/24.0;
+                int perchannel_data = (_4byte[0]&0x000000FF)|((_4byte[1]&0x000000FF)<<8)|((_4byte[2]&0x000000FF)<<16)|((_4byte[3]&0x000000FF)<<24);
+                double r4 = ((double)perchannel_data)/24.0;//24倍增益
                 data_from_wifi.append(  r4 );//将QBytearray转换成double存入队列
             }
             //读取8字节电极脱落数据,每字节8bit ,含8通道 p或n状态
