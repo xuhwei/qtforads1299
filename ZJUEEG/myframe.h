@@ -13,15 +13,18 @@ class myframe: public QWidget
 {
 public:
     explicit myframe(QWidget *parent = 0);
-    //~myframe();
+    ~myframe();
 
     int hasDataToDraw(double sample_rate, QVector<double>& singlechannel_data,
-                      int amplititude_scale, int time_scale,
                       Qt::GlobalColor lineColor,
                       double min, double max, double rms,
-                      QVector<qint8>& mark,
+                      QVector<qint8>& mark,int rms_w_count,int rms_w_length,
                       bool leadoff_p = false, bool leadoff_n = false);
     void refreshPixmap();
+    void refreshScale();
+    void setRMS(bool rmsenable);
+    void setXscale(int t_scale);
+    void setYscale(int ampli_scale);
 protected:
     /*      重载
      *    重载resizeEvent，窗口变化时执行操作
@@ -47,7 +50,9 @@ private:
     double pen_pos_y;
     int height;
     int width;
-
+    bool rms_enable;
+    int amplititude_scale;
+    int time_scale;
 };
 
 #endif // MYFRAME_H

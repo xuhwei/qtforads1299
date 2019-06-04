@@ -39,16 +39,16 @@
 // Include this file in your application to get everything
 //
 
-#include "Common.h"
-#include "Biquad.h"
-#include "Cascade.h"
-#include "PoleFilter.h"
-#include "State.h"
+#include "iir/Common.h"
+#include "iir/Biquad.h"
+#include "iir/Cascade.h"
+#include "iir/PoleFilter.h"
+#include "iir/State.h"
 
-#include "Butterworth.h"
-#include "ChebyshevI.h"
-#include "ChebyshevII.h"
-#include "Custom.h"
-#include "RBJ.h"
+#include "iir/Butterworth.h"
+#include "iir/ChebyshevI.h"
+#include "iir/ChebyshevII.h"
+#include "iir/Custom.h"
+#include "iir/RBJ.h"
 
 #endif

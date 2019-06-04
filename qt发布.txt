@@ -1,6 +1,0 @@
-1.使用release 跑一遍程序
-2.将目录下生成的exe文件拷贝至一个新文件夹中
-3.搜索Qt x.x 64bit for desktop，运行
-4.进入exe文件所在目录： cd  /d  c:\xxx\xxx
-5.执行命令：windeployqt    <生成的exe文件名.exe>
-6.新建文件夹下自动复制依赖的库

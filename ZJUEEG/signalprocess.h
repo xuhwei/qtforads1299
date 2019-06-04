@@ -3,89 +3,66 @@
 
 #include <QVector>
 #include "Iir.h"  //use external library from github
+#include "FFT/FFT.h"
 
-#define PI  3.14159265359
+#define PI_m  3.141592653589793
 
-const int order = 14; // 4th order (=2 biquads)
+const int order = 8; // 8th order (=16 biquads)
 
 class SignalProcess
 {
 public:
     SignalProcess(int ch_number,int perch_data_number);
+    ~SignalProcess();
 
     void runProcess(QVector<QVector <double>>& data_in);
     void setNotchFilter(double sampleRate, bool notchEnable, double notchFreq=50.0, double bandwidth=10.0);
     void setBandFilter(double sampleRate, bool bandEnable, double fl,double fh);
-    void setHighPassFilter(bool enable);
+    void setHighPassFilter(double sampleRate, bool enable);
+    void setRMS(bool enable);
+    int getRMSWindowLength(void);
+    int getRMSWindowLengthOver(void);
+    void runFFT();
 
-    int channel_number;
-    int per_channel_data_number;
+    int rms_length;//窗长
+    int rms_w_overlength;//重叠窗长
 
     QVector<QVector<double>> y_out; //[channel_number][per_channel_data_number]
     QVector<double> min,max,rms;
+    emxArray_real_T * fftout;
+    QVector<QVector<double>> fft_x;
+    QVector<QVector<double>> fft_y;
 
 private:
+    const int FFT_N;
+    int channel_number;
+    int per_channel_data_number;
     bool notch_enable;
     bool band_enable;
     bool hpass_enable;
-    double a1_notch,a2_notch,b0_notch,b1_notch,b2_notch;
-    double a1_band, a2_band, b0_band, b1_band, b2_band;
-    double a1_hpass, b0_hpass, b1_hpass;
+    bool rms_enable;
+    int count_y_in_dataForFFT;
+    emxArray_real_T* fftin;
 
-    QVector<QVector<double>> x0_x1_notch;//[channel_number][2]
-    QVector<QVector<double>> y0_y1_notch;//[channel_number][2]
-    QVector<QVector<double>> x0_x1_band;
-    QVector<QVector<double>> y0_y1_band;
-    QVector<QVector<double>> y0_hpass;
-    QVector<QVector<double>> x0_hpass;
     QVector<QVector<double>> y_notch; //[channel_number][per_channel_data_number]
     QVector<QVector<double>> y_band; //[channel_number][per_channel_data_number]
     QVector<QVector<double>> y_hpass; //[channel_number][per_channel_data_number]
+    QVector<QVector<double>> y_in_dataForFFT;
 
-    void copyData(QVector<QVector<double>>& data_in);//复制data_in到data_out
+    void copyData(QVector<QVector<double>>& data_in);//复制data_in到y_out
     void runBandFilter(QVector<QVector <double>>& data_in);
     void runNotchFilter(QVector<QVector <double>>& data_in);
     void runHighPassFilter(QVector<QVector <double>>& data_in);
+    void runRMS(QVector<QVector<double>>& data_in);
     void calculateMinMax(QVector<QVector<double>>& data_in);//计算最大最小值
     void calculateRMS(QVector<QVector<double>>& data_in);//计算均方根值
     void allocateSpaceForVector2D(QVector<QVector<double>>& vector, int first_size,int second_size);
     void fillVectorDoubleZero(QVector<QVector<double>>& vector);
 
-    //实例化滤波器，填充滤波器容器,这里按32处理。
-    //注：不可使用容器存储实例化对象，否则出现SIGSEGV错误
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter0;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter1;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter2;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter3;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter4;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter5;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter6;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter7;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter8;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter9;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter10;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter11;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter12;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter13;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter14;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter15;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter16;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter17;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter18;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter19;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter20;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter21;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter22;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter23;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter24;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter25;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter26;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter27;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter28;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter29;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter30;
-    Iir::Butterworth::BandPass<order,Iir::DirectFormII> bp_filter31;
-
+    //滤波器指针
+    QVector<Iir::ChebyshevI::BandPass<order,Iir::DirectFormII>*> bp_filter;
+    QVector<Iir::ChebyshevI::BandStop<order,Iir::DirectFormII>*> bs_filter;
+    QVector<Iir::Butterworth::HighPass<2,Iir::DirectFormII>*> hp_filter;
 };
 
 
