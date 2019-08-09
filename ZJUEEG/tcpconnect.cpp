@@ -29,7 +29,13 @@ TcpConnect::TcpConnect( QString ip_in, quint16 port_in,TcpType tcp_type,double N
     startBoard = false;
     glazer_on = false;
     commandReturn = false;
-    packet_size = 8+(4*32+8)*(channel_number/32);//包大小
+    if(channel_number < 32){
+        packet_size = 8+4*channel_number +8;
+    }
+    else{
+        packet_size = 8+(4*32+8)*(channel_number/32);//包大小
+    }
+
 
     //确定TCP连接类型
     if (Tcp_server == tcp_type){
@@ -72,7 +78,20 @@ void TcpConnect::updatePort(quint16 port_in){
 void TcpConnect::updateIp(QString ip_in){
     ip = ip_in;
 }
-
+//运行过程中通道不可更改。
+//按下停止键后数据已从队列中pop出，这里不用再进行处理
+//需要新建文件用于存储
+void TcpConnect::setChArg(int ch_number){
+    channel_number = ch_number;
+    if(channel_number < 32){
+        packet_size = 8+4*channel_number +8;
+    }
+    else{
+        packet_size = 8+(4*32+8)*(channel_number/32);//包大小
+    }
+    datafile->close();
+    hasSetupNewFile = false;
+}
 //客户端开始连接
 void TcpConnect::client_connectToBoard(){
     client->abort();
@@ -80,6 +99,7 @@ void TcpConnect::client_connectToBoard(){
 }
 //服务端开始连接
 void TcpConnect::server_connectToBoard(){
+    startBoard = false;
     server->listen(QHostAddress::Any, port);
 }
 
@@ -179,10 +199,8 @@ void TcpConnect::server_tcpReadData(){
             qint8 mark_tmp = wifiBuffer.left(1).toHex().toInt(&ok,16);
             wifiBuffer.remove(0,1);
             mark.append(mark_tmp);
-            int times_32channel = channel_number/32;
-            for(int channel32count = 0; channel32count<times_32channel; ++channel32count){
-                //填充通道数据
-                for(int channel = 0 ; channel<32; ++channel){
+            if(channel_number<32){
+                for(int channel = 0 ; channel<channel_number; ++channel){
                      QByteArray _4byte =  wifiBuffer.left(4);//取4个字节
                      wifiBuffer.remove(0,4);//从buffer中删去读取的4个字节
                      int perchannel_data = (_4byte[0]&0x000000FF)|((_4byte[1]&0x000000FF)<<8)|((_4byte[2]&0x000000FF)<<16)|((_4byte[3]&0x000000FF)<<24);
@@ -191,25 +209,46 @@ void TcpConnect::server_tcpReadData(){
                 }
                 //读取8字节电极脱落数据,每字节8bit ,含8通道 p或n状态
                 //elect_lead_off[64] 为：ch1p,ch2p,ch3p,...,ch32p,ch1n,ch2n,...,ch32n
-                for (int i = 0; i<8; ++i){
-                    bool ok;
-                    qint8 _1byte = wifiBuffer.left(1).toHex().toInt(&ok,16);
-                    wifiBuffer.remove(0,1);
-                    if(!ok){
-                        qDebug("can not convert lead off data");
-                    }
-                    else{
-                        elect_lead_off.append(_1byte&0x01);
-                        elect_lead_off.append(_1byte&0x02);
-                        elect_lead_off.append(_1byte&0x04);
-                        elect_lead_off.append(_1byte&0x08);
-                        elect_lead_off.append(_1byte&0x10);
-                        elect_lead_off.append(_1byte&0x20);
-                        elect_lead_off.append(_1byte&0x40);
-                        elect_lead_off.append(_1byte&0x80);
-                     }
+                QByteArray _8byte =  wifiBuffer.left(8);
+                wifiBuffer.remove(0,8);
+                for (int i=0; i<channel_number*2; ++i){
+                    elect_lead_off.append(_8byte[i/8] & (1<<i));
                 }
             }
+            else{
+                int times_32channel = channel_number/32;
+                for(int channel32count = 0; channel32count<times_32channel; ++channel32count){
+                    //填充通道数据
+                    for(int channel = 0 ; channel<32; ++channel){
+                         QByteArray _4byte =  wifiBuffer.left(4);//取4个字节
+                         wifiBuffer.remove(0,4);//从buffer中删去读取的4个字节
+                         int perchannel_data = (_4byte[0]&0x000000FF)|((_4byte[1]&0x000000FF)<<8)|((_4byte[2]&0x000000FF)<<16)|((_4byte[3]&0x000000FF)<<24);
+                         double r4 = ((double)perchannel_data)/24.0;//24倍增益
+                         data_from_wifi.append(r4);//将QBytearray转换成double存入队列
+                    }
+                    //读取8字节电极脱落数据,每字节8bit ,含8通道 p或n状态
+                    //elect_lead_off[64] 为：ch1p,ch2p,ch3p,...,ch32p,ch1n,ch2n,...,ch32n
+                    for (int i = 0; i<8; ++i){
+                        bool ok;
+                        qint8 _1byte = wifiBuffer.left(1).toHex().toInt(&ok,16);
+                        wifiBuffer.remove(0,1);
+                        if(!ok){
+                            qDebug("can not convert lead off data");
+                        }
+                        else{
+                            elect_lead_off.append(_1byte&0x01);
+                            elect_lead_off.append(_1byte&0x02);
+                            elect_lead_off.append(_1byte&0x04);
+                            elect_lead_off.append(_1byte&0x08);
+                            elect_lead_off.append(_1byte&0x10);
+                            elect_lead_off.append(_1byte&0x20);
+                            elect_lead_off.append(_1byte&0x40);
+                            elect_lead_off.append(_1byte&0x80);
+                         }
+                    }
+                }
+            }
+
         }
         //*************
         //***************************      数据包解析结束        ********************
@@ -240,4 +279,11 @@ QString TcpConnect::setGlazerOnOff(bool on){
         delete glazerfile;
     }
     return filename;
+}
+
+void TcpConnect::flush(){
+     wifiBuffer.clear();
+     mark.clear();
+     data_from_wifi.clear();
+     elect_lead_off.clear();
 }

@@ -15,6 +15,7 @@
 #include "FFT_emxutil.h"
 #include "fft2.h"
 
+
 /* Function Declarations */
 static double rt_hypotd_snf(double u0, double u1);
 
@@ -59,13 +60,16 @@ void FFT(const emxArray_real_T *datain, double N, emxArray_real_T *out)
   c_datain = *datain;
   c_datain.size = (int *)&b_datain;
   c_datain.numDimensions = 1;
+
   fft(&c_datain, datain->size[1], b_y1);
+
   unnamed_idx_1 = (unsigned int)datain->size[1];
   k = y_f->size[0] * y_f->size[1];
   y_f->size[0] = 1;
   y_f->size[1] = (int)unnamed_idx_1;
   emxEnsureCapacity_real_T(y_f, k);
   k = 0;
+
   do {
     exitg1 = 0;
     b_unnamed_idx_1 = datain->size[1];
@@ -102,7 +106,9 @@ void FFT(const emxArray_real_T *datain, double N, emxArray_real_T *out)
   k = out->size[0] * out->size[1];
   out->size[0] = 1;
   out->size[1] = b_unnamed_idx_1;
-  emxEnsureCapacity_real_T(out, k);
+  // we find following line cause some error ,due to out.numDimensions is too large
+  //emxEnsureCapacity_real_T(out, k);
+
   for (k = 0; k < b_unnamed_idx_1; k++) {
     out->data[out->size[0] * k] = y_f->data[k];
   }

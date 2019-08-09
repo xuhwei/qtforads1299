@@ -14,6 +14,8 @@
 #include <iostream>
 #include <QColor>
 
+#define MAX_CHANNEL_NUMBER 256
+
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow)
@@ -22,15 +24,24 @@ MainWindow::MainWindow(QWidget *parent) :
     this->setWindowTitle("ZJU Bioelectricity Acquisition");
     this->setWindowIcon(QIcon(":/images/zju.png"));
 
+    //初始化绘图部件容器
+    channel_enable_map.resize(MAX_CHANNEL_NUMBER);
+    initVectorDrawFrame();
+    initVectorQCheckBox();
+
+
     //先确定通道数
+    /*
     QDialog *ch_N_Dialog = new QDialog;
     QVBoxLayout *vBoxLayout1 = new QVBoxLayout;
     QLabel *label1 = new QLabel;
     label1->setText("选择通道数，选择后无法更改");
-    QComboBox *comboBox1 = new QComboBox;
+    QComboBox *comboBox1 = new QComboBox;    
     comboBox1->addItem("64");comboBox1->addItem("32");comboBox1->addItem("96");
     comboBox1->addItem("128");comboBox1->addItem("160");comboBox1->addItem("192");
     comboBox1->addItem("224");comboBox1->addItem("256");
+    comboBox1->addItem("1");comboBox1->addItem("2");comboBox1->addItem("4");comboBox1->addItem("8");
+    comboBox1->addItem("16");
     vBoxLayout1->addWidget(label1);
     vBoxLayout1->addWidget(comboBox1);
     ch_N_Dialog->setLayout(vBoxLayout1);
@@ -41,26 +52,35 @@ MainWindow::MainWindow(QWidget *parent) :
     delete label1;
     delete vBoxLayout1;
     delete ch_N_Dialog;
+    */
 
     ip = "10.10.10.1";
     port = 61613;
     ui->Port_lineEdit->setText("61613");
     notchFilter = false;
     bandFilter = false;
-    hpassFilter = false;
+    hpassFilter = true;
     rms_enable = false;
     rms_w_count = 0;
     rms_w_length = 0;
     fl_bandPass = 1.0;
     fh_bandPass = 50.0;
     per_channel_number = 100;//为了计算FFT,请保证能整除1000；不推荐修改
+    channel_number = 32;
     sampleRate = 1000.0;
     running = false;
     runFileData = false;
     singleElectMode = false;
 
-    channel_enable_map.resize(channel_number);
+
+    connect(ui->sampleRate_comboBox,SIGNAL(currentIndexChanged(int)),this,SLOT(changeSampleRate()));
+    connect(ui->openfile_action, &QAction::triggered, this, &MainWindow::openfile);
+    connect(ui->setChannel,SIGNAL(triggered(bool)),this,SLOT(openChannelSetWidget()));
+    connect(ui->setFFT,SIGNAL(triggered(bool)),this,SLOT(openFFTSetWidget()));
+    connect(ui->stft,SIGNAL(triggered(bool)),this,SLOT(openSTFTWidget()));
+
     //给data,elec_off_p,elec_off_n分配空间
+
     data.resize(channel_number);
     for(int i=0;i<channel_number;i++){
         data[i].resize(per_channel_number);
@@ -68,37 +88,30 @@ MainWindow::MainWindow(QWidget *parent) :
     elect_off_p.resize(channel_number);
     elect_off_n.resize(channel_number);
     mark.resize(per_channel_number);
-    //初始化绘图部件容器
-    initVectorDrawFrame();
-    initVectorQCheckBox();
 
-    dataProcess = new SignalProcess(channel_number,per_channel_number);
+    dataProcess = new SignalProcess(channel_number,per_channel_number,sampleRate);
     tcp = new TcpConnect(ip,port,Tcp_server,channel_number,ui->command_return_label);
     connect(this->tcp,SIGNAL(boardStart()),this,SLOT(connectToBardDone()));
 
     ui->amplititude_comboBox->setCurrentIndex(3);
     ui->time_comboBox->setCurrentIndex(2);
     ui->sampleRate_comboBox->setCurrentIndex(2);
+    ui->comboBox_channel_number->setCurrentIndex(5);
     ui->stopButton->setEnabled(false);
     ui->hpass_checkBox->setCheckState(Qt::CheckState::Checked);
-    hpassFilter = true;
     ui->glazer_start->setEnabled(false);
     ui->glazer_stop->setEnabled(false);
     ui->glazer_result->setEnabled(false);
-    ui->sampleRate_comboBox->setEnabled(false);
+    //ui->sampleRate_comboBox->setEnabled(false);
     ui->electmode_pushButton->setEnabled(false);
     ui->command_lineEdit->setEnabled(false);
     ui->command_send_botton->setEnabled(false);
-    connect(ui->sampleRate_comboBox,SIGNAL(currentIndexChanged(int)),this,SLOT(changeSampleRate()));
-    connect(ui->openfile_action, &QAction::triggered, this, &MainWindow::openfile);
-    connect(ui->setChannel,SIGNAL(triggered(bool)),this,SLOT(openChannelSetWidget()));
-    connect(ui->setFFT,SIGNAL(triggered(bool)),this,SLOT(openFFTSetWidget()));
-    connect(ui->stft,SIGNAL(triggered(bool)),this,SLOT(openSTFTWidget()));
+
     readFile = new QFile();
 
     fft_selfControl = true;
-    fft_xmin = fft_xmax = fft_ymin = fft_ymax = 0;
-    initFFTWidget(true,fft_xmin,fft_xmax,fft_ymin,fft_ymax);
+    fft_xmin = 0; fft_xmax = 100; fft_ymin = 0; fft_ymax = 1000;
+    initFFTWidget(fft_selfControl,fft_xmin,fft_xmax,fft_ymin,fft_ymax);
 }
 
 MainWindow::~MainWindow()
@@ -114,28 +127,28 @@ MainWindow::~MainWindow()
     delete tcp;
     delete dataProcess;
     delete ui;
+    readFile =NULL;
+    tcp = NULL;
+    dataProcess =NULL;
+    ui = NULL;
 }
 
 //初始化绘图部件容器
 void MainWindow::initVectorDrawFrame(){
-    drawframe.resize(channel_number);
-    for(int i=1; i<=channel_number;++i){
+    drawframe.resize(MAX_CHANNEL_NUMBER);
+    for(int i=1; i<=MAX_CHANNEL_NUMBER;++i){
         QString obj_name_frame = "widget_"+QString::number(i);
         myframe *p_frame = ui->tabWidget->findChild<myframe *>(obj_name_frame);
         drawframe[i-1] = p_frame;
     }
 }
 void MainWindow::initVectorQCheckBox(){
-    checkbox.resize(channel_number);
-    for(int i=1; i<=channel_number;++i){
+    checkbox.resize(MAX_CHANNEL_NUMBER);
+    for(int i=1; i<=MAX_CHANNEL_NUMBER;++i){
         QString obj_name_checkbox = "checkBox_"+QString::number(i);
         QCheckBox *p_checkbox = ui->tabWidget->findChild<QCheckBox *>(obj_name_checkbox);
         checkbox[i-1] = p_checkbox;
         connect(checkbox[i-1],SIGNAL(stateChanged(int)),this,SLOT(changeChannelEnable()));
-    }
-    //默认使能前8个通道
-    for(int i=8; i<channel_number; ++i){
-        checkbox[i]->setChecked(false);
     }
 }
 
@@ -158,7 +171,7 @@ void MainWindow::changeNotchFilter(){
         notchFilter = false;
     QString a = notchFilter?"open":"close";
     ui->statusbar->showMessage("notchFilter: " + a);
-    dataProcess->setNotchFilter(sampleRate,notchFilter);
+    dataProcess->setNotchFilter(notchFilter);
 }
 /***************  UI 槽函数***********
  *   使能高通滤波器
@@ -168,7 +181,7 @@ void MainWindow::changeHpassFilter(){
         hpassFilter = true;
     else if(Qt::Unchecked == ui->hpass_checkBox->checkState())
         hpassFilter = false;
-    dataProcess->setHighPassFilter(sampleRate,hpassFilter);
+    dataProcess->setHighPassFilter(hpassFilter);
 }
 
 /***************  UI 槽函数***********
@@ -177,11 +190,11 @@ void MainWindow::changeHpassFilter(){
 void MainWindow::changeBandFilter(){
     if(Qt::Checked == ui->bandfilter_checkbox->checkState())
         bandFilter = true;
-    else if(Qt::Unchecked == ui->notch_checkBox->checkState())
+    else if(Qt::Unchecked == ui->bandfilter_checkbox->checkState())
         bandFilter = false;
     QString a = bandFilter?"open":"close";
     ui->statusbar->showMessage("bandFilter: " + a);
-    dataProcess->setBandFilter(sampleRate,bandFilter,fl_bandPass,fh_bandPass);
+    dataProcess->setBandFilter(bandFilter,fl_bandPass,fh_bandPass);
 }
 
 /***************  UI 槽函数***********
@@ -197,7 +210,7 @@ void MainWindow::changeFhFilter(){
     default:fh_bandPass = 10000.0;
     }
     ui->statusbar->showMessage("fh: " + QString::number(fh_bandPass));
-    dataProcess->setBandFilter(sampleRate,bandFilter,fl_bandPass,fh_bandPass);
+    dataProcess->setBandFilter(bandFilter,fl_bandPass,fh_bandPass);
 }
 /***************  UI 槽函数***********
  *   改变带通滤波器下限截止频率
@@ -212,7 +225,7 @@ void MainWindow::changeFlFilter(){
     default:fl_bandPass = 0.0;
     }
     ui->statusbar->showMessage("fl: " + QString::number(fl_bandPass));
-    dataProcess->setBandFilter(sampleRate,bandFilter,fl_bandPass,fh_bandPass);
+    dataProcess->setBandFilter(bandFilter,fl_bandPass,fh_bandPass);
 }
 /***************  UI 槽函数***********
  *   启用RMS
@@ -262,6 +275,7 @@ void MainWindow::glazerEnd(){
     glazertimer->quit();
     glazertimer->wait();
     delete glazertimer;
+    glazertimer = NULL;
     stop_m();
 }
 /***************  UI 槽函数***********
@@ -336,15 +350,22 @@ void MainWindow::changeTimeScale(){
  */
 void MainWindow::changeChannelEnable(){
     QString enableChannel = "Enable channel:";
+    for(int channel = channel_number; channel<MAX_CHANNEL_NUMBER; ++channel){
+        channel_enable_map[channel] = false;
+        drawframe[channel]->setVisible(false);
+        checkbox[channel]->setVisible(false);
+    }
     for(int channel=0; channel<channel_number; channel++){
         if(Qt::Checked == checkbox[channel]->checkState()){
             channel_enable_map[channel] = true;
             drawframe[channel]->setVisible(true);
+            checkbox[channel]->setVisible(true);
         }
         else{
             channel_enable_map[channel] = false;
             drawframe[channel]->refreshPixmap();
             drawframe[channel]->setVisible(false);
+            checkbox[channel]->setVisible(false);
         }
     }
 
@@ -361,7 +382,7 @@ void MainWindow::changeChannelEnable(){
 void MainWindow::connectToBardDone(){
     ui->IP_lineEdit->setEnabled(false);
     ui->Port_lineEdit->setEnabled(false);
-    ui->sampleRate_comboBox->setEnabled(true);
+    //ui->sampleRate_comboBox->setEnabled(true);
     ui->electmode_pushButton->setEnabled(true);
     ui->command_lineEdit->setEnabled(true);
     ui->command_send_botton->setEnabled(true);
@@ -370,28 +391,36 @@ void MainWindow::connectToBardDone(){
  *   更改采样率
  */
 void MainWindow::changeSampleRate(){
+
     int index = 0x90;
     switch(ui->sampleRate_comboBox->currentIndex()){
-    case 0: sampleRate = 250.0; index+=6;break;
-    case 1: sampleRate = 500.0; index+=5;break;
-    case 2: sampleRate = 1000.0;index+=4;break;
-    case 3: sampleRate = 2000.0;index+=3;break;
-    case 4: sampleRate = 4000.0;index+=2;break;
-    case 5: sampleRate = 8000.0;index+=1;break;
-    case 6: sampleRate = 16000.0;break;
-    default: sampleRate = 1000.0;index+=4;
+    case 0: sampleRate = 250.0; index+=6;per_channel_number = 125;break;//50
+    case 1: sampleRate = 500.0; index+=5;per_channel_number = 125;break;//100
+    case 2: sampleRate = 1000.0;index+=4;per_channel_number = 250;break;//200
+    case 3: sampleRate = 2000.0;index+=3;per_channel_number = 500;break;//400
+    case 4: sampleRate = 4000.0;index+=2;per_channel_number = 1000;break;//800
+    case 5: sampleRate = 8000.0;index+=1;per_channel_number = 2000;break;//1600
+    case 6: sampleRate = 16000.0;per_channel_number = 4000;break;//16000
+    default: sampleRate = 1000.0;index+=4;per_channel_number = 250;//200
     }
     ui->statusbar->showMessage("SampleRate: " + QString::number(sampleRate,'f',1)+"Hz");
-    QByteArray data_send;
-    data_send.append(static_cast<char>(0xaa));
-    data_send.append(static_cast<char>(0x03));
-    data_send.append(static_cast<char>(0x01));
-    data_send.append(static_cast<char>(index));
-    tcp->newconnection->write(data_send);
+    if(tcp->startBoard){
+        QByteArray data_send;
+        data_send.append(static_cast<char>(0xaa));
+        data_send.append(static_cast<char>(0x03));
+        data_send.append(static_cast<char>(0x01));
+        data_send.append(static_cast<char>(index));
+        tcp->newconnection->write(data_send);
+        tcp->flush();
+    }
 
-    dataProcess->setBandFilter(sampleRate,bandFilter,fl_bandPass,fh_bandPass);
-    dataProcess->setNotchFilter(sampleRate,notchFilter);
-    dataProcess->setHighPassFilter(sampleRate,hpassFilter);
+    //rms_w_count = per_channel_number/rms_w_length;
+    dataProcess->setSampleRate(sampleRate);
+    dataProcess->setChArg(channel_number,per_channel_number);
+    for(int i=0;i<channel_number;i++){
+        data[i].resize(per_channel_number);
+    }
+    mark.resize(per_channel_number);
 }
 /***************  UI 槽函数***********
  *   启动TCP连接
@@ -455,6 +484,8 @@ void MainWindow::stop_m(){
     ui->runButton->setEnabled(true);
     ui->stopButton->setEnabled(false);
     ui->command_return_checkBox->setEnabled(true);
+    ui->comboBox_channel_number->setEnabled(true);
+    ui->sampleRate_comboBox->setEnabled(true);
     if(rms_enable && ui->glazer_stop->isEnabled()){
         glazerEnd();
     }
@@ -473,19 +504,22 @@ void MainWindow::run_m(){
     running = true;
     ui->runButton->setEnabled(false);
     ui->stopButton->setEnabled(true);
+    ui->sampleRate_comboBox->setEnabled(false);
     ui->command_return_checkBox->setCheckable(false);
     ui->command_return_checkBox->setEnabled(false);
+    ui->comboBox_channel_number->setEnabled(false);
     tcp->commandReturn = false;
 
     if(!tcp->startBoard){
         /***************   使用文件读取的数据绘图     *******************/
         if(runFileData){
             QMessageBox::information(this,"","将使用选中文件内数据绘图");
-            unsigned int numberToRead = static_cast<unsigned int>((4 + 4 + (32*4 +8)*(channel_number/32))*per_channel_number);
+            int boradNumber = channel_number/32;
+            unsigned int numberToRead = static_cast<unsigned int>((4 + 4 + (32*4 +8)*boradNumber)*per_channel_number);
             while(running){
                 //读取依次为 4字节编号，4字节冗余（最后一个bit为mark），channel_number*4字节通道数据，8字节电极脱落数据
                 char _32_channel_data[numberToRead];
-                int boradNumber = channel_number/32;
+
                 if(numberToRead != readFile->read(_32_channel_data,numberToRead)){
                     QMessageBox::information(this,"","读取结束");
                     readFile->close();
@@ -528,8 +562,8 @@ void MainWindow::run_m(){
                                 elect_off_n[channel_number - 32*_32count - channel - 1] =  elect_off_n[channel_number - 32*_32count - channel - 1]|| elect_off_bool.back();
                                 elect_off_bool.pop_back();
                             }
-                            mark[j] = _32_channel_data[(8 + (32*4 +8)*boradNumber)*j + 7];
                         }
+                        mark[j] = _32_channel_data[(8 + (32*4 +8)*boradNumber)*j + 7];
                     }
 
 
@@ -569,7 +603,7 @@ void MainWindow::run_m(){
             //产生10Hz递增,带100uV直流,幅度100uV正弦信号，采样率为1kHz
             for(int i = 0; i<channel_number; ++i){
                 for(int j = 0; j< per_channel_number ;j++){
-                    double y = 100.0*sin(2*PI_m*0.01*(i+1)*static_cast<double>(j))+100.0;
+                    double y = 100.0*sin(4.0*PI_m*static_cast<double>(j)*(i+1.0)/per_channel_number)+100.0;
                     data[i][j] = y;
                 }
             }
@@ -579,9 +613,15 @@ void MainWindow::run_m(){
             mark[static_cast<int>(per_channel_number/2)] = 1;
 
             while(running){
+                try{
                 dataProcess->runProcess(data);
-                if(channel_number == 32)
-                    dataProcess->runFFT();
+                dataProcess->runFFT();
+                }
+                catch(...){
+                    QMessageBox::critical(this, "debug message", "crash happened in dataProcess");
+                    exit(0);
+                }
+                try{
                 for(int channel = 0; channel < channel_number; ++channel){
                     if(channel_enable_map[channel]){
                         if(drawframe[channel]->hasDataToDraw(sampleRate, dataProcess->y_out[channel],
@@ -595,8 +635,18 @@ void MainWindow::run_m(){
                         }
                     }
                 }
-                if(channel_number == 32)
+                }
+                catch(...){
+                    QMessageBox::critical(this, "debug message", "crash happened in draw signal");
+                    exit(0);
+                }
+                try{
                     drawFFT();
+                }
+                catch(...){
+                    QMessageBox::critical(this, "debug message", "crash happened in draw fft");
+                    exit(0);
+                }
                 qApp->processEvents();
                 //int delay = (int)((49.0/500000.0)*(double)time_scale);
                 //QTime timer = QTime::currentTime().addMSecs(100);
@@ -617,29 +667,34 @@ void MainWindow::run_m(){
 
         while(running){
              if(tcp->data_from_wifi.size() > per_channel_number*channel_number){
-                 for(int channel = 0; channel<channel_number; ++channel){
-                     elect_off_p[channel] = false;
-                     elect_off_n[channel] = false;
-                 }
-                 for(int i=0; i<per_channel_number;i++){
-                     for(int channel = 0; channel<channel_number; ++channel){
-                         data[channel][i] = static_cast<double>(tcp->data_from_wifi.front());
-                         tcp->data_from_wifi.pop_front();
+                 try{
+                        for(int channel = 0; channel<channel_number; ++channel){
+                            elect_off_p[channel] = false;
+                            elect_off_n[channel] = false;
+                        }
+                        for(int i=0; i<per_channel_number;i++){
+                            for(int channel = 0; channel<channel_number; ++channel){
+                                data[channel][i] = static_cast<double>(tcp->data_from_wifi.front());
+                                tcp->data_from_wifi.pop_front();
 
-                         elect_off_p[channel] = elect_off_p[channel] || tcp->elect_lead_off.front();
-                         tcp->elect_lead_off.pop_front();
-                     }
-                     for(int channel = 0; channel<channel_number; ++channel){
-                         elect_off_n[channel] = elect_off_n[channel] || tcp->elect_lead_off.front();
-                         tcp->elect_lead_off.pop_front();
-                     }
-                     mark[i] = tcp->mark.front();
-                     tcp->mark.pop_front();
-                 }
-
-                 dataProcess->runProcess(data);
-                 if(channel_number == 32)
-                     dataProcess->runFFT();
+                                elect_off_p[channel] = elect_off_p[channel] || tcp->elect_lead_off.front();
+                                tcp->elect_lead_off.pop_front();
+                            }
+                            for(int channel = 0; channel<channel_number; ++channel){
+                                elect_off_n[channel] = elect_off_n[channel] || tcp->elect_lead_off.front();
+                                tcp->elect_lead_off.pop_front();
+                            }
+                            mark[i] = tcp->mark.front();
+                            tcp->mark.pop_front();
+                        }
+                 }catch(...){QMessageBox::critical(this,"debug message", "crash happen in getdatafromtcp");}
+                 try{
+                    dataProcess->runProcess(data);
+                 }catch(...){QMessageBox::critical(this,"debug message", "crash happen in runProcess");}
+                 try{
+                    dataProcess->runFFT();
+                 }catch(...){QMessageBox::critical(this,"debug message", "crash happen in runFFT");}
+                 try{
                  for(int channel = 0; channel<channel_number; ++channel){
                      if(channel_enable_map[channel]){
                          if(drawframe[channel]->hasDataToDraw(sampleRate, dataProcess->y_out[channel],
@@ -654,9 +709,11 @@ void MainWindow::run_m(){
 
                      }
                  }
+                 }catch(...){QMessageBox::critical(this,"debug message", "crash happen in draw signal");}
               }
-              if(channel_number == 32)
-                 drawFFT();
+             try{
+              drawFFT();
+              }catch(...){QMessageBox::critical(this,"debug message", "crash happen in draw fft");}
               qApp->processEvents();
         }
     }
@@ -698,7 +755,7 @@ void MainWindow::changeCommandReturn(){
 void MainWindow::showhelpmessage(){
     QObject* sender = QObject::sender();
     if("rms_help_pushButton" == sender->objectName()){
-        QMessageBox::about(this,"Help Message","RMS: we show the data by windowsize = 100, overlap = 0 \n we draw the glazer by windowsize = 200, overlap = 30");
+        QMessageBox::about(this,"Help Message","RMS: we show the data by windowsize = 50, overlap = 0 \n we draw the glazer by windowsize = 200, overlap = 30");
     }
     else if("path_help_pushButton" == sender->objectName()){
         QMessageBox::about(this,"Help Message","default save path is current filedir, and will set up a new file \"ZJUEEGDATA\"");
@@ -716,37 +773,26 @@ void MainWindow::openChannelSetWidget(){
     ch_set_window.exec();
     changeChannelEnable();
 }
+/***************  UI 槽函数***********
+ *   更改通道数
+ */
 void MainWindow::changeChannelNumber(int index){
     switch(index){
-        case 0: channel_number = 64;break;
-        case 1: channel_number = 32;break;
-        case 2: channel_number = 96;break;
-        case 3: channel_number = 128;break;
-        case 4: channel_number = 160;break;
-        case 5: channel_number = 192;break;
-        case 6: channel_number = 224;break;
-        case 7: channel_number = 256;break;
+        case 0: channel_number = 1;break;
+        case 1: channel_number = 2;break;
+        case 2: channel_number = 4;break;
+        case 3: channel_number = 8;break;
+        case 4: channel_number = 16;break;
+        case 5: channel_number = 32;break;
+        case 6: channel_number = 64;break;
+        case 7: channel_number = 96;break;
+        case 8: channel_number = 128;break;
+        case 9: channel_number = 160;break;
+        case 10: channel_number = 192;break;
+        case 11: channel_number = 224;break;
+        case 12:channel_number = 256;break;
     default:channel_number = 32;
     }
-    /*
-    //重新设置容器大小
-    data.resize(channel_number);
-    for(int i=0;i<channel_number;i++){
-        data[i].resize(per_channel_number);
-    }
-    elect_off_p.resize(channel_number);
-    elect_off_n.resize(channel_number);
-    mark.resize(per_channel_number);
-    //更新dataProcess
-    delete dataProcess;
-    dataProcess = new SignalProcess(channel_number,per_channel_number);
-    //更新tcp
-    delete tcp;
-    tcp = new TcpConnect(ip,port,Tcp_server,channel_number);
-    connect(this->tcp,SIGNAL(boardStart()),this,SLOT(connectToBardDone()));
-    //更新FFT绘图
-    initFFTWidget(true,fft_xmin,fft_xmax,fft_ymin,fft_ymax);
-    */
     switch(channel_number){
     case 32: ui->tab_1->setEnabled(true);ui->tab_2->setEnabled(false);ui->tab_3->setEnabled(false);ui->tab_4->setEnabled(false);
         ui->tab_5->setEnabled(false);ui->tab_6->setEnabled(false);ui->tab_7->setEnabled(false);ui->tab_8->setEnabled(false);
@@ -774,6 +820,38 @@ void MainWindow::changeChannelNumber(int index){
         break;
     default: ui->tab_1->setEnabled(true);ui->tab_2->setEnabled(false);ui->tab_3->setEnabled(false);ui->tab_4->setEnabled(false);
         ui->tab_5->setEnabled(false);ui->tab_6->setEnabled(false);ui->tab_7->setEnabled(false);ui->tab_8->setEnabled(false);
+    }
+    // 更新窗口部件
+    for(int i = channel_number; i<MAX_CHANNEL_NUMBER; ++i){
+        checkbox[i]->setChecked(false);
+    }
+    for(int i =0; i<channel_number; ++i){
+        checkbox[i]->setChecked(true);
+    }
+    //更新实例化对象参数
+    dataProcess->setChArg(channel_number, per_channel_number);
+    tcp->setChArg(channel_number);
+    //更新容器
+    data.resize(channel_number);
+    for(int i=0;i<channel_number;i++){
+        data[i].resize(per_channel_number);
+    }
+    elect_off_p.resize(channel_number);
+    elect_off_n.resize(channel_number);
+
+    if(tcp->startBoard){
+        // aa 07 通道数
+        // 通道数从1开始，256通道发送0x00
+        int ch_to_send = channel_number;
+        if (ch_to_send == 256){
+            ch_to_send = 0;
+        }
+        QByteArray data_send;
+        data_send.append(static_cast<char>(0xaa));
+        data_send.append(static_cast<char>(0x07));
+        data_send.append(static_cast<char>(ch_to_send));
+        tcp->newconnection->write(data_send);
+        tcp->flush();
     }
 }
 /***************  重写X按钮事件***********
@@ -804,6 +882,7 @@ void MainWindow::openfile(){
             runFileData = true;
             readFilePath = filePath;
             delete readFile;
+            readFile = NULL;
             readFile = new QFile(filePath);
             if(!readFile->open(QIODevice::ReadOnly)){
                 QMessageBox::warning(this,"警告","打开文件失败");
@@ -882,7 +961,8 @@ void MainWindow::initFFTWidget(bool selfControl,double xmin,double xmax,double y
 }
 /**** FFT绘图 *****/
 void MainWindow::drawFFT(){
-    for(int i =0 ;i<channel_number; ++i){
+    int channel_fft = channel_number<32?channel_number:32;
+    for(int i =0 ;i<channel_fft; ++i){
         ui->FFTWidget->graph(i)->data().clear();
         if(channel_enable_map[i]){
             ui->FFTWidget->graph(i)->setVisible(true);
@@ -890,6 +970,9 @@ void MainWindow::drawFFT(){
         }
         else
             ui->FFTWidget->graph(i)->setVisible(false);
+    }
+    for(int i =channel_fft; i<32; ++i){
+        ui->FFTWidget->graph(i)->setVisible(false);
     }
     if(fft_selfControl)
         ui->FFTWidget->rescaleAxes();
@@ -899,7 +982,11 @@ void MainWindow::drawFFT(){
 void MainWindow::openSTFTWidget(){
     if(!stft_window)
         delete stft_window;
+        stft_window = NULL;
     stft_window = new STFT;
     stft_window->show();
 }
 
+void MainWindow::flush(){
+    //pass
+}

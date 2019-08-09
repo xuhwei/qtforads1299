@@ -30,6 +30,8 @@ public:
      void setStorePath(QString );
      void updatePort(quint16);
      void updateIp(QString);
+     void setChArg(int ch_number);
+     void flush();
      QString setGlazerOnOff(bool);
 
      QTcpSocket *newconnection;

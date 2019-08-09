@@ -78,6 +78,7 @@ private:
     void initVectorDrawFrame();
     void initVectorQCheckBox();
     void drawFFT();
+    void flush();
 
     Ui::MainWindow *ui;
 

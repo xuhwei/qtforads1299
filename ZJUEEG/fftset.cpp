@@ -1,3 +1,8 @@
+/*
+ * 菜单栏中FFT对话框实现
+ * 可选择自动坐标系或手动输入
+ */
+
 #include "fftset.h"
 #include "ui_fftset.h"
 

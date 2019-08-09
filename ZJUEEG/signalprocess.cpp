@@ -10,72 +10,50 @@
  *      3）滑动RMS窗长：rms_length
  *      4）滑动RMS窗长重叠长度（不推荐更改，不推荐重叠）：rms_w_overlength
  */
-/*  注意：
- *  采样率变化后，高通滤波器不可使用
- */
+
 
 
 #include "signalprocess.h"
 
 
-SignalProcess::SignalProcess(int ch_number,int perch_data_number):
-    FFT_N(1000),
+SignalProcess::SignalProcess(int ch_number,int perch_data_number, double sample_rate):
+    FFT_N(sample_rate),
     channel_number(ch_number),
-    per_channel_data_number(perch_data_number)
+    per_channel_data_number(perch_data_number),
+    sampleRate(sample_rate)
 {
     notch_enable = false;
     band_enable = false;
     hpass_enable = false;
     rms_enable = false;
-    rms_length = 100;//窗长使得窗正好能移动到100个点中的最后一个点，10,20,50为宜
+    rms_length = 50;//窗长使得窗正好能移动到100个点中的最后一个点，10,20,50为宜
     rms_w_overlength = 10;//重叠长度使得窗正好能移动到100个点中的最后一个点，10个为宜//实际非重叠窗，这个参数无用
     count_y_in_dataForFFT = 0;
+    notch_freq = 50.0;
+    notch_bandwidth = 10.0;
+    band_fl=1.0;
+    band_fh=50.0;
 
-    //分配内存空间
-    bp_filter.resize(channel_number);
-    bs_filter.resize(channel_number);
-    hp_filter.resize(channel_number);
-    for(int channel=0; channel<channel_number; ++channel){
-        bp_filter[channel] = new Iir::ChebyshevI::BandPass<order,Iir::DirectFormII>;
-        bs_filter[channel] = new Iir::ChebyshevI::BandStop<order,Iir::DirectFormII>;
-        hp_filter[channel] = new Iir::Butterworth::HighPass<2,Iir::DirectFormII>;
-    }
-    allocateSpaceForVector2D(y_notch, channel_number, per_channel_data_number);
-    allocateSpaceForVector2D(y_band, channel_number, per_channel_data_number);
-    allocateSpaceForVector2D(y_hpass, channel_number, per_channel_data_number);
-    allocateSpaceForVector2D(y_out, channel_number, per_channel_data_number);
-    min.resize(channel_number);
-    max.resize(channel_number);
-    rms.resize(channel_number);
-    //FFT 结构体*fftout,*fftin 构建 以及空间分配
-    fftout = new emxArray_real_T;
-    fftout->data = (double *)calloc((unsigned int)FFT_N, sizeof(double));
-    fftout->size = (int *)calloc((unsigned int)2, sizeof(int));
-    fftout->canFreeData = true;
-    fftout->allocatedSize = FFT_N;
-    fftin = new emxArray_real_T;
-    fftin->data = (double *)calloc((unsigned int)FFT_N, sizeof(double));
-    fftin->size = (int *)calloc((unsigned int)2, sizeof(int));
-    fftin->size[0]=1;fftin->size[1]=FFT_N;
-    fftin->numDimensions = 1;
-    fftin->allocatedSize = FFT_N;
-    fftin->canFreeData = true;
-    allocateSpaceForVector2D(fft_x,channel_number,FFT_N/2);
-    allocateSpaceForVector2D(fft_y,channel_number,FFT_N/2);
-    allocateSpaceForVector2D(y_in_dataForFFT,channel_number,FFT_N);//固定FFT_N个点做FFT，存储FFT_N个数据
+
+    initial();
 }
 
 SignalProcess::~SignalProcess(){
     free(fftout->data);
     free(fftout->size);
     delete fftout;
+    fftout = NULL;
     free(fftin->data);
     free(fftin->size);
     delete fftin;
+    fftin = NULL;
     for(int channel=0; channel<channel_number; ++channel){
         delete bp_filter[channel];
         delete bs_filter[channel];
         delete hp_filter[channel];
+        bp_filter[channel] =NULL;
+        bs_filter[channel] =NULL;
+        hp_filter[channel] =NULL;
     }
 }
 
@@ -107,6 +85,112 @@ void SignalProcess::copyData(QVector<QVector<double>>& data_in){
         }
     }
 }
+
+void SignalProcess::reallocate(){
+    allocateSpace();
+    setupFilter();
+}
+
+void SignalProcess::allocateSpace(){
+    bp_filter.resize(channel_number);
+    bs_filter.resize(channel_number);
+    hp_filter.resize(channel_number);
+    allocateSpaceForVector2D(y_notch, channel_number, per_channel_data_number);
+    allocateSpaceForVector2D(y_band, channel_number, per_channel_data_number);
+    allocateSpaceForVector2D(y_hpass, channel_number, per_channel_data_number);
+    allocateSpaceForVector2D(y_out, channel_number, per_channel_data_number);
+    min.resize(channel_number);
+    max.resize(channel_number);
+    rms.resize(channel_number);
+
+    fftout->data = (double *)calloc((unsigned int)FFT_N, sizeof(double));
+    fftout->size = (int *)calloc((unsigned int)2, sizeof(int));
+    fftout->canFreeData = false;
+    fftout->allocatedSize = FFT_N;
+
+    fftin->data = (double *)calloc((unsigned int)FFT_N, sizeof(double));
+    fftin->size = (int *)calloc((unsigned int)2, sizeof(int));
+    fftin->size[0]=1;fftin->size[1]=FFT_N;
+    fftin->numDimensions = 1;
+    fftin->allocatedSize = FFT_N;
+    fftin->canFreeData = false;
+
+    allocateSpaceForVector2D(fft_x,channel_number,FFT_N/2);
+    allocateSpaceForVector2D(fft_y,channel_number,FFT_N/2);
+    allocateSpaceForVector2D(y_in_dataForFFT,32,FFT_N);//固定FFT_N个点做FFT，存储FFT_N个数据
+
+    for(int channel=0; channel<channel_number; ++channel){
+        bp_filter[channel] = new Iir::ChebyshevI::BandPass<order,Iir::DirectFormII>;
+        bs_filter[channel] = new Iir::ChebyshevI::BandStop<order,Iir::DirectFormII>;
+        hp_filter[channel] = new Iir::Butterworth::HighPass<2,Iir::DirectFormII>;
+    }
+}
+
+void SignalProcess::setupFilter(){
+    for(int channel =0; channel<channel_number; ++channel){
+        bs_filter[channel]->setup(sampleRate,notch_freq,notch_bandwidth,1.0);
+    }
+    for(int channel=0; channel<channel_number; ++channel){
+        bp_filter[channel]->setup(sampleRate,(band_fh+band_fl)/2.0,band_fh-band_fl,1.0);
+    }
+    for(int channel=0; channel<channel_number; ++channel){
+        hp_filter[channel]->setup(sampleRate,1.0);
+    }
+}
+
+//  初始化内存分配和滤波器建立，使用该类数据处理功能需先运行该函数
+void SignalProcess::initial(){
+    fftout = new emxArray_real_T;
+    fftin = new emxArray_real_T;
+    allocateSpace();
+    setupFilter();
+}
+
+//仅当参数变化时做出反应。若已经分配过内存，则需要更新参数并重新分配，否则更新参数即可。
+void SignalProcess::setChArg(int ch_number, int per_channel_number){
+    if(channel_number != ch_number  ||  per_channel_data_number != per_channel_number){
+        //释放空间
+        for(int channel=0; channel<channel_number; ++channel){
+            delete bp_filter[channel];
+            delete bs_filter[channel];
+            delete hp_filter[channel];
+            bp_filter[channel] = NULL;
+            bs_filter[channel] = NULL;
+            hp_filter[channel] = NULL;
+        }
+        free(fftout->data);
+        free(fftin->data);
+        free(fftout->size);
+        free(fftin->size);
+
+        channel_number = ch_number;
+        per_channel_data_number = per_channel_number;
+        count_y_in_dataForFFT = 0;
+
+        reallocate();
+    }
+}
+
+void SignalProcess::setSampleRate(double sample_rate){
+    if(sampleRate != sample_rate){
+        sampleRate = sample_rate;
+        FFT_N = sample_rate;
+        count_y_in_dataForFFT = 0;
+        allocateSpaceForVector2D(y_in_dataForFFT,32,FFT_N);
+        allocateSpaceForVector2D(fft_x,channel_number,FFT_N/2);
+        allocateSpaceForVector2D(fft_y,channel_number,FFT_N/2);
+        free(fftout->data);
+        free(fftin->data);
+        fftout->data = (double *)calloc((unsigned int)FFT_N, sizeof(double));
+        fftout->allocatedSize = FFT_N;
+        fftin->data = (double *)calloc((unsigned int)FFT_N, sizeof(double));
+        fftin->allocatedSize = FFT_N;
+        fftin->size[1]=FFT_N;
+
+        setupFilter();
+    }
+}
+
 /************ 信号处理  ********
  * 根据各个滤波器的使能进行滤波
  * 计算最小值，最大值，均方根值
@@ -162,15 +246,13 @@ void SignalProcess::runProcess(QVector<QVector <double>>& data_in){
 
 /************ 陷波  ********
  */
-void SignalProcess::setNotchFilter(double sampleRate, bool notchEnable,double notchFreq , double bandwidth)
+void SignalProcess::setNotchFilter(bool notchEnable,double notchFreq , double bandwidth)
 {
     notch_enable = notchEnable;
-    if(notch_enable){
-        double center_frequency = notchFreq; // Hz
-        double width_freuency = bandwidth;//Hz
-        for(int channel =0; channel<channel_number; ++channel){
-            bs_filter[channel]->setup(sampleRate,center_frequency,width_freuency,1.0);
-        }
+    notch_bandwidth = bandwidth;
+    notch_freq = notchFreq;
+    if(notchEnable){
+        setupFilter();
     }
 }
 void SignalProcess::runNotchFilter(QVector<QVector <double>>& data_in){
@@ -184,18 +266,18 @@ void SignalProcess::runNotchFilter(QVector<QVector <double>>& data_in){
 /************ 带通  ********
  *
  */
-void SignalProcess::setBandFilter(double sampleRate, bool bandEnable, double fl,double fh)
+void SignalProcess::setBandFilter(bool bandEnable, double fl,double fh)
 {  
-    if(fl<fh)
+    if(fl<fh){
         band_enable = bandEnable;
-    else
+        band_fl = fl;
+        band_fh = fh;
+    }
+    else{
         band_enable = false;
+    }
     if(band_enable){
-        double center_frequency = (fh+fl)/2.0; // Hz
-        double width_freuency = fh-fl;//Hz
-        for(int channel=0; channel<channel_number; ++channel){
-            bp_filter[channel]->setup(sampleRate,center_frequency,width_freuency,1.0);
-        }
+        setupFilter();
     }
 }
 void SignalProcess::runBandFilter(QVector<QVector <double>>& data_in)
@@ -210,10 +292,10 @@ void SignalProcess::runBandFilter(QVector<QVector <double>>& data_in)
 /************ 高通滤波  ********
  * 固定截止频率为1 Hz
  */
-void SignalProcess::setHighPassFilter(double sampleRate, bool enable){
+void SignalProcess::setHighPassFilter(bool enable){
     hpass_enable = enable;
-    for(int channel=0; channel<channel_number; ++channel){
-        hp_filter[channel]->setup(sampleRate,1.0);
+    if(band_enable){
+        setupFilter();
     }
 }
 void SignalProcess::runHighPassFilter(QVector<QVector <double>>& data_in)
@@ -286,27 +368,29 @@ void SignalProcess::calculateRMS(QVector<QVector<double>>& data_in){
  *  分辨率 = 采样率/点数。更高的采样率意味着更低的频谱分辨率，请自行注意。
  * */
 void SignalProcess::runFFT(){
+    int channel_fft = channel_number<32?channel_number:32;
     if(count_y_in_dataForFFT + per_channel_data_number >FFT_N){
         qDebug("Error:1000 can not be divided with no remainder by perchannelnumber");
         return;
     }
     else{
         //复制计算好的数据到y_in_dataForFFT，填充满FFT_N个数据后计算FFT;
-        for(int channel=0; channel<channel_number; ++channel){
+        for(int channel=0; channel<channel_fft; ++channel){
             for(int i = 0; i<per_channel_data_number; ++i){
                 y_in_dataForFFT[channel][i+count_y_in_dataForFFT] = y_out.at(channel).at(i);
             }
         }
         count_y_in_dataForFFT += per_channel_data_number;
         if(count_y_in_dataForFFT == FFT_N){
-            for(int channel = 0; channel<channel_number; ++channel){
+            for(int channel = 0; channel<channel_fft; ++channel){
                 for(int i = 0; i<FFT_N; ++i){
                     fftin->data[i] = y_in_dataForFFT.at(channel).at(i);
                 }
                 FFT(fftin,FFT_N,fftout);
                 for(int i=0; i<FFT_N/2;++i){
-                    fft_y[channel][i] = *(fftout->data+i);
-                    fft_x[channel][i] = i;
+                    //fft_y[channel][i] = *(fftout->data+i);
+                    fft_y[channel][i] = fftout->data[i];
+                    fft_x[channel][i] = double(i);
                 }               
             }
             count_y_in_dataForFFT = 0;

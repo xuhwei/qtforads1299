@@ -65,12 +65,10 @@ void emxEnsureCapacity_real_T(emxArray_real_T *emxArray, int oldNumel)
   if (oldNumel < 0) {
     oldNumel = 0;
   }
-
   newNumel = 1;
   for (i = 0; i < emxArray->numDimensions; i++) {
     newNumel *= emxArray->size[i];
   }
-
   if (newNumel > emxArray->allocatedSize) {
     i = emxArray->allocatedSize;
     if (i < 16) {
@@ -84,7 +82,6 @@ void emxEnsureCapacity_real_T(emxArray_real_T *emxArray, int oldNumel)
         i <<= 1;
       }
     }
-
     newData = calloc((unsigned int)i, sizeof(double));
     if (emxArray->data != NULL) {
       memcpy(newData, (void *)emxArray->data, sizeof(double) * oldNumel);
@@ -92,7 +89,6 @@ void emxEnsureCapacity_real_T(emxArray_real_T *emxArray, int oldNumel)
         free((void *)emxArray->data);
       }
     }
-
     emxArray->data = (double *)newData;
     emxArray->allocatedSize = i;
     emxArray->canFreeData = true;
