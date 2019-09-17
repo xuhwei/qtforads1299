@@ -8,8 +8,12 @@
 #include <QFile>
 #include <QVector>
 #include <QLabel>
+#include <QObject>
+#include <QThread>
+#include <windows.h>
+#include <QSerialPort>
 
-//特别注意：为修改方便，接受逻辑适配32通道，不适配其他通道数情况。非32通道通读该代码后请自行修改相关参数与逻辑
+#define MAX_SIZE_COM_BUFFER 192
 
 using namespace std;
 
@@ -17,6 +21,13 @@ enum TcpType{
     Tcp_server,
     Tcp_client,
 };
+
+enum ConnectType{
+    _serial_com,
+    _wifi,
+    _no_connect
+};
+class com_commnicate;
 
 class TcpConnect:public QDialog
 {    
@@ -32,6 +43,9 @@ public:
      void updateIp(QString);
      void setChArg(int ch_number);
      void flush();
+     void sendToBoard(QByteArray);
+     void start_com(QSerialPort* port);
+     void stop_com();
      QString setGlazerOnOff(bool);
 
      QTcpSocket *newconnection;
@@ -43,24 +57,28 @@ public:
      QQueue<bool> elect_lead_off;
 
      bool startBoard;
-     bool commandReturn;
-
-signals:
-     void boardStart();
-private:
+     bool commandReturn;  
+     bool hasSetupNewFile;
+     bool glazer_on;
+     bool com_find_head;
+     int channel_number;
+     int packet_size;
+     QByteArray wifiBuffer;
      QLabel* command_return_label;
      QFile *datafile;
      QFile *glazerfile;
+     QString storePath;
+     ConnectType connect_type;
+
+signals:
+     void boardStart();
+
+private:    
      TcpType server_client;
      QString ip;
      quint16 port;
-     QString storePath;
-
-     QByteArray wifiBuffer;
-     bool hasSetupNewFile;
-     bool glazer_on;
-     int channel_number;
-     int packet_size;
+     QThread *new_thread = NULL;
+     com_commnicate *serial_com = NULL;
 
 private slots:
      void client_tcpConnectSuccess();
@@ -70,6 +88,31 @@ private slots:
 
      void server_newConnectFromClient();
      void server_tcpReadData();
+};
+
+class com_commnicate: public QDialog
+{
+    Q_OBJECT
+public:
+    com_commnicate(QSerialPort *port, TcpConnect *obj){
+        serial_port = port;
+        tcp_obj = obj;
+        keeprun = true;
+        memset(com_buffer,0,MAX_SIZE_COM_BUFFER*sizeof(char));
+        packet_number_last = 0;
+    }
+    //void com_run();
+    QSerialPort *serial_port;
+public slots:
+    void com_run();
+    void com_prepare();    
+private:    
+    TcpConnect *tcp_obj;
+
+    unsigned int packet_number_last;
+    bool keeprun;
+    char com_buffer[MAX_SIZE_COM_BUFFER];
+    DWORD wCount;
 };
 
 #endif // TCPCONNECT_H

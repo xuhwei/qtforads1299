@@ -6,6 +6,10 @@
 #include <QCloseEvent>
 #include <QTime>
 #include <QLabel>
+#include <QAbstractNativeEventFilter>
+#include <windows.h>
+#include <QSerialPort>
+#include <QSerialPortInfo>
 
 #include "tcpconnect.h"
 #include "signalprocess.h"
@@ -14,6 +18,7 @@
 #include "channelset.h"
 #include "fftset.h"
 #include "stft.h"
+#include "portset.h"
 
 class myframe;
 class QCheckBox;
@@ -23,7 +28,7 @@ namespace Ui {
 class MainWindow;
 }
 
-class MainWindow : public QMainWindow
+class MainWindow : public QMainWindow, public QAbstractNativeEventFilter
 {
     Q_OBJECT
 
@@ -36,9 +41,12 @@ public:
     QVector<bool> elect_off_p;
     QVector<bool> elect_off_n;
     QVector<qint8> mark;
+    QVector<QString> vector_port_name;
+    QSerialPort *serial_port = NULL;
 
 protected:
     void closeEvent( QCloseEvent * event);
+    bool nativeEventFilter(const QByteArray &eventType, void *message, long *result);
 
 private slots:
     void stop_m();
@@ -47,6 +55,7 @@ private slots:
     void openChannelSetWidget();
     void openFFTSetWidget();
     void openSTFTWidget();
+    void openPortSetWidget();
     void openfile();
     void connectWifi();
     void connectToBardDone();
@@ -72,6 +81,7 @@ private slots:
     void glazerEnd();
     void glazerResult();
     void initFFTWidget(bool,double,double,double,double);
+    void portSetDone();
 
 private:
 
@@ -79,6 +89,8 @@ private:
     void initVectorQCheckBox();
     void drawFFT();
     void flush();
+    void initCom();
+    void scanPort();
 
     Ui::MainWindow *ui;
 
@@ -101,6 +113,7 @@ private:
     bool singleElectMode;
     bool fft_selfControl;
     double fft_xmin,fft_xmax,fft_ymin,fft_ymax;
+    bool find_com;
     QPen pen[32];
     QVector<bool>  channel_enable_map;
     TcpConnect *tcp;
@@ -113,6 +126,9 @@ private:
     Glazer* glazer_window;
     TimeCount* glazertimer;
     STFT* stft_window = NULL;
+
+    qint32 port_bandrate;
+
 };
 //计时功能，继承QThread来实现多线程。
 class TimeCount:public QThread

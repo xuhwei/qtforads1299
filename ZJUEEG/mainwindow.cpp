@@ -13,8 +13,11 @@
 #include <QFileDialog>
 #include <iostream>
 #include <QColor>
+#include <dbt.h>
 
 #define MAX_CHANNEL_NUMBER 256
+
+
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -29,30 +32,9 @@ MainWindow::MainWindow(QWidget *parent) :
     initVectorDrawFrame();
     initVectorQCheckBox();
 
-
-    //先确定通道数
-    /*
-    QDialog *ch_N_Dialog = new QDialog;
-    QVBoxLayout *vBoxLayout1 = new QVBoxLayout;
-    QLabel *label1 = new QLabel;
-    label1->setText("选择通道数，选择后无法更改");
-    QComboBox *comboBox1 = new QComboBox;    
-    comboBox1->addItem("64");comboBox1->addItem("32");comboBox1->addItem("96");
-    comboBox1->addItem("128");comboBox1->addItem("160");comboBox1->addItem("192");
-    comboBox1->addItem("224");comboBox1->addItem("256");
-    comboBox1->addItem("1");comboBox1->addItem("2");comboBox1->addItem("4");comboBox1->addItem("8");
-    comboBox1->addItem("16");
-    vBoxLayout1->addWidget(label1);
-    vBoxLayout1->addWidget(comboBox1);
-    ch_N_Dialog->setLayout(vBoxLayout1);
-    connect(comboBox1,SIGNAL(currentIndexChanged(int)),this,SLOT(changeChannelNumber(int)));
-    comboBox1->setCurrentIndex(1);
-    ch_N_Dialog->show();ch_N_Dialog->exec();
-    delete comboBox1;
-    delete label1;
-    delete vBoxLayout1;
-    delete ch_N_Dialog;
-    */
+    find_com = false;
+    port_bandrate = 115200;
+    serial_port = new QSerialPort();
 
     ip = "10.10.10.1";
     port = 61613;
@@ -78,6 +60,7 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->setChannel,SIGNAL(triggered(bool)),this,SLOT(openChannelSetWidget()));
     connect(ui->setFFT,SIGNAL(triggered(bool)),this,SLOT(openFFTSetWidget()));
     connect(ui->stft,SIGNAL(triggered(bool)),this,SLOT(openSTFTWidget()));
+    connect(ui->set_port,SIGNAL(triggered(bool)),this,SLOT(openPortSetWidget()));
 
     //给data,elec_off_p,elec_off_n分配空间
 
@@ -112,6 +95,7 @@ MainWindow::MainWindow(QWidget *parent) :
     fft_selfControl = true;
     fft_xmin = 0; fft_xmax = 100; fft_ymin = 0; fft_ymax = 1000;
     initFFTWidget(fft_selfControl,fft_xmin,fft_xmax,fft_ymin,fft_ymax);
+
 }
 
 MainWindow::~MainWindow()
@@ -121,7 +105,11 @@ MainWindow::~MainWindow()
         data_send.append(static_cast<char>(0xaa));
         data_send.append(static_cast<char>(0x06));
         data_send.append(static_cast<char>(0x00));
-        tcp->newconnection->write(data_send);
+        tcp->sendToBoard(data_send);
+    }
+    if(serial_port!=NULL){
+        delete serial_port;
+        serial_port = NULL;
     }
     delete readFile;
     delete tcp;
@@ -410,7 +398,7 @@ void MainWindow::changeSampleRate(){
         data_send.append(static_cast<char>(0x03));
         data_send.append(static_cast<char>(0x01));
         data_send.append(static_cast<char>(index));
-        tcp->newconnection->write(data_send);
+        tcp->sendToBoard(data_send);
         tcp->flush();
     }
 
@@ -445,7 +433,7 @@ void MainWindow::changeSingleBipolarElect(){
                 data_send.append(static_cast<char>(0x03));
                 data_send.append(static_cast<char>(channel_addr));
                 data_send.append(static_cast<char>(0x68));
-                tcp->newconnection->write(data_send);
+                tcp->sendToBoard(data_send);
                 channel_addr++;
                 QTime timer = QTime::currentTime().addMSecs(25);
                 while( QTime::currentTime() < timer )
@@ -462,7 +450,7 @@ void MainWindow::changeSingleBipolarElect(){
                 data_send.append(static_cast<char>(0x03));
                 data_send.append(static_cast<char>(channel_addr));
                 data_send.append(static_cast<char>(0x60));
-                tcp->newconnection->write(data_send);
+                tcp->sendToBoard(data_send);
                 channel_addr++;
                 QTime timer = QTime::currentTime().addMSecs(25);
                 while( QTime::currentTime() < timer )
@@ -494,7 +482,7 @@ void MainWindow::stop_m(){
         data_send.append(static_cast<char>(0xaa));
         data_send.append(static_cast<char>(0x06));
         data_send.append(static_cast<char>(0x00));
-        tcp->newconnection->write(data_send);
+        tcp->sendToBoard(data_send);
     }
 }
 /***************  UI 槽函数***********
@@ -663,7 +651,7 @@ void MainWindow::run_m(){
         data_send.append(static_cast<char>(0xaa));
         data_send.append(static_cast<char>(0x06));
         data_send.append(static_cast<char>(0x01));
-        tcp->newconnection->write(data_send);
+        tcp->sendToBoard(data_send);
 
         while(running){
              if(tcp->data_from_wifi.size() > per_channel_number*channel_number){
@@ -731,7 +719,7 @@ void MainWindow::sendCommand(){
                 bool ok;
                 c_send.append(static_cast<char>(command[i].toInt(&ok,16)));
             }
-            tcp->newconnection->write(c_send);
+            tcp->sendToBoard(c_send);
         }
     }
     else{
@@ -850,11 +838,11 @@ void MainWindow::changeChannelNumber(int index){
         data_send.append(static_cast<char>(0xaa));
         data_send.append(static_cast<char>(0x07));
         data_send.append(static_cast<char>(ch_to_send));
-        tcp->newconnection->write(data_send);
+        tcp->sendToBoard(data_send);
         tcp->flush();
     }
 }
-/***************  重写X按钮事件***********
+/***************  重载X按钮事件***********
  *   实现关闭程序时，如果还连接着板子，则给板子发送停止采集数据指令
  *   解决关闭程序时，如果绘制还未完成，后台程序未退出问题
  */
@@ -864,9 +852,30 @@ void MainWindow::closeEvent(QCloseEvent*){
         data_send.append(static_cast<char>(0xaa));
         data_send.append(static_cast<char>(0x06));
         data_send.append(static_cast<char>(0x00));
-        tcp->newconnection->write(data_send);
+        tcp->sendToBoard(data_send);
     }
     running = false;
+}
+/***************  重载事件滤波器***********
+ *
+ */
+bool MainWindow::nativeEventFilter(const QByteArray &eventType, void *message, long *){
+    if(eventType == "windows_generic_MSG"){
+        MSG* ev = static_cast<MSG *>(message);
+        if(ev->message == WM_DEVICECHANGE){
+            switch (ev->wParam) {
+            case DBT_DEVICEARRIVAL:
+                initCom();
+                break;
+            case DBT_DEVICEREMOVECOMPLETE:
+                initCom();
+                break;
+            default:
+                break;
+            }
+        }
+    }
+    return false;
 }
 
 /*************   打开文件  **************
@@ -989,4 +998,37 @@ void MainWindow::openSTFTWidget(){
 
 void MainWindow::flush(){
     //pass
+}
+
+void MainWindow::openPortSetWidget(){
+    scanPort();
+    PortSet portwidget(vector_port_name, serial_port);
+    connect(&portwidget, SIGNAL(portSetDone()), this, SLOT(portSetDone()));
+    portwidget.show();
+    portwidget.exec();
+}
+void MainWindow::portSetDone(){
+    if(!serial_port->open(QIODevice::ReadWrite)){
+        qDebug()<<"open serial port failed";
+        find_com = false;
+    }
+    else{
+        find_com = true;
+        tcp->start_com(serial_port);
+    }
+}
+void MainWindow::initCom(){
+    scanPort();
+    //serial_port->setBaudRate(port_bandrate);
+    //serial_port->setDataBits(QSerialPort::Data8);
+    //serial_port->setParity(QSerialPort::NoParity);
+    //serial_port->setFlowControl(QSerialPort::NoFlowControl);
+    //serial_port->setStopBits(QSerialPort::TwoStop);
+}
+void MainWindow::scanPort(){
+    vector_port_name.clear();
+    foreach (const QSerialPortInfo &info, QSerialPortInfo::availablePorts())
+    {
+        vector_port_name.append(info.portName());
+    }
 }

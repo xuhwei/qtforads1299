@@ -80,7 +80,7 @@ int myframe::hasDataToDraw(double sample_rate, QVector<double>& singlechannel_da
     has_data_to_draw = true;
     //计算每两个点跨越多少时间(ms)范围（px）
     double x_among_two_point = x_interval/(x_scale/(double)(width-10));
-    qDebug("samplerate %f datasize %d x_among_2 %f",sample_rate,length,x_among_two_point);
+    //qDebug("samplerate %f datasize %d x_among_2 %f",sample_rate,length,x_among_two_point);
     //计算每像素点（px）代表多少幅度(mv)
     double y_perScale = 2*y_scale/(double)height;// 单位:uv/px
     //擦除矩形，每画一次polyline，将要画的PolyLine x轴范围内矩形擦除。

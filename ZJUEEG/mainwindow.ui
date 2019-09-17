@@ -14142,9 +14142,16 @@
     </property>
     <addaction name="stft"/>
    </widget>
+   <widget class="QMenu" name="port_menu">
+    <property name="title">
+     <string>串口</string>
+    </property>
+    <addaction name="set_port"/>
+   </widget>
    <addaction name="file_menu"/>
    <addaction name="channel_menu"/>
    <addaction name="process_menu"/>
+   <addaction name="port_menu"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <action name="openfile_action">
@@ -14165,6 +14172,11 @@
   <action name="setFFT">
    <property name="text">
     <string>FFT配置</string>
+   </property>
+  </action>
+  <action name="set_port">
+   <property name="text">
+    <string>配置</string>
    </property>
   </action>
  </widget>
@@ -14559,8 +14571,8 @@
    <slot>changeChannelNumber(int)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>1098</x>
-     <y>158</y>
+     <x>1181</x>
+     <y>171</y>
     </hint>
     <hint type="destinationlabel">
      <x>1080</x>

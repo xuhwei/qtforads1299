@@ -7,6 +7,7 @@
 QT       += core gui
 QT       += network
 QT       += core gui printsupport
+QT       += serialport
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -41,7 +42,9 @@ SOURCES += main.cpp\
     FFT/rtGetNaN.cpp \
     channelset.cpp \
     stft.cpp \
-    fftset.cpp
+    fftset.cpp \
+    usbhandle.cpp \
+    portset.cpp
 
 
 HEADERS  += mainwindow.h \
@@ -254,7 +257,9 @@ HEADERS  += mainwindow.h \
     sp++/include/window.h \
     sp++/include/wvd-impl.h \
     sp++/include/wvd.h \
-    fftset.h
+    fftset.h \
+    usbhandle.h \
+    portset.h
 
 
 
@@ -263,11 +268,11 @@ FORMS    += mainwindow.ui \
     glazer.ui \
     channelset.ui \
     stft.ui \
-    fftset.ui
+    fftset.ui \
+    portset.ui
 
 DISTFILES +=
 
 RESOURCES += \
     zjueeg.qrc
-
 

@@ -20,15 +20,18 @@
 #include <QDir>
 
 TcpConnect::TcpConnect( QString ip_in, quint16 port_in,TcpType tcp_type,double N_channel,QLabel * label):
+    channel_number(N_channel),
     command_return_label(label),
     ip(ip_in),
-    port(port_in),
-    channel_number(N_channel)
+    port(port_in)
 {
+    connect_type = _no_connect;
     hasSetupNewFile = false;
     startBoard = false;
     glazer_on = false;
     commandReturn = false;
+    com_find_head = false;
+
     if(channel_number < 32){
         packet_size = 8+4*channel_number +8;
     }
@@ -70,6 +73,12 @@ TcpConnect::~TcpConnect(){
         delete server;
     else if (Tcp_client == server_client)
         delete client;
+
+    if(new_thread != NULL)
+        new_thread->exit(0);
+        delete new_thread;
+    if(serial_com != NULL)
+        delete serial_com;
 }
 
 void TcpConnect::updatePort(quint16 port_in){
@@ -111,6 +120,7 @@ void TcpConnect::server_connectToBoard(){
 //SLOT 连接成功
 void TcpConnect::client_tcpConnectSuccess(){
     QMessageBox::information(this,"Message","connect to board success,IP = " + ip + " port = " + QString::number(port,10));
+    connect_type = _wifi;
     //QMessageBox tip;
     //tip.setText("connect to board success,IP = " + ip + " port = " + QString::number(port,10));
     //tip.exec();
@@ -163,6 +173,7 @@ void TcpConnect::server_tcpReadData(){
             int return_data = int(tmpdata[0]&0xFF);
             QString content = QString::number(return_data,16);
             command_return_label->setText(content);
+            return;
         }
 
         //接收逻辑
@@ -286,4 +297,196 @@ void TcpConnect::flush(){
      mark.clear();
      data_from_wifi.clear();
      elect_lead_off.clear();
+}
+void TcpConnect::sendToBoard(QByteArray data){
+    if(connect_type == _wifi){
+        newconnection->write(data);
+    }
+    else if(connect_type == _serial_com){
+        serial_com->serial_port->write(data);
+    }
+}
+
+void TcpConnect::start_com(QSerialPort *port){
+    connect_type = _serial_com;
+    //单向传输，此时就设置为板子启动
+    startBoard = true;
+    emit boardStart();
+    QMessageBox::information(this,"Connecting", "串口连接成功！",QMessageBox::Yes);
+
+    if(serial_com != NULL){
+        delete serial_com;
+        serial_com = NULL;
+    }
+    if(new_thread != NULL){
+        new_thread->exit(0);
+        new_thread->wait();
+        delete new_thread;
+        new_thread = NULL;
+    }
+    serial_com = new com_commnicate(port, this);
+    new_thread = new QThread();
+    connect(new_thread,SIGNAL(started()),serial_com,SLOT(com_prepare()));
+    serial_com->moveToThread(new_thread);
+    new_thread->start();
+}
+void TcpConnect::stop_com(){
+    com_find_head = false;
+    flush();
+}
+void com_commnicate::com_prepare(){
+    connect(serial_port, SIGNAL(readyRead()), this, SLOT(com_run()));
+}
+void com_commnicate::com_run(){
+    if(!tcp_obj->startBoard){
+        qDebug()<<"forbid running here";
+        /*
+        QString data = serial_port->readAll();
+        if (data == QString(tr("NMCTemp"))){
+            QMessageBox::information(this,"Connecting", "server receive : " + data + "   ->连接成功！",QMessageBox::Yes);
+            tcp_obj->startBoard = true;
+            emit tcp_obj->boardStart();
+        }
+        else{
+            qDebug()<<"receive not NMCTemp: "<<data;
+        }
+        */
+    }
+    else{
+        //调试模式，接收发送命令的返回值
+        if(tcp_obj->commandReturn){
+            //memset(com_buffer, 0, MAX_SIZE_COM_BUFFER*sizeof(char));
+            //ReadFile(*com_handle,com_buffer,1,&wCount,NULL);
+            QByteArray tmpdata = serial_port->readAll();
+            int return_data = int(tmpdata[0]&0xFF);
+            QString content = QString::number(return_data,16);
+            tcp_obj->command_return_label->setText(content);
+        }
+
+        //接收逻辑
+        //注：没有设置读取buffer大小，默认为无限制，适用于数据不能丢失场合。dataready信号在BUffer中有数据待读取和新接收到数据时均会触发。但会合并触发。
+        //memset(com_buffer, 0, MAX_SIZE_COM_BUFFER*sizeof(char));
+        //ReadFile(*com_handle,com_buffer,MAX_SIZE_COM_BUFFER,&wCount,NULL);
+        QByteArray tmpdata = serial_port->readAll();
+
+        //新建文件用于存储原始数据
+        if(!tcp_obj->hasSetupNewFile){
+            delete tcp_obj->datafile;
+            QString current_time = QDateTime::currentDateTime().toString("yyyy-MM-dd[hh-mm-ss]");
+            tcp_obj->datafile = new QFile(tcp_obj->storePath+"/"+ current_time + ".txt");
+            if(!tcp_obj->datafile->open(QIODevice::WriteOnly)){
+                QMessageBox::warning(this,"warning", "can't open file to save data",QMessageBox::Yes);
+            }
+            else
+                tcp_obj->hasSetupNewFile = true;
+        }
+        tcp_obj->datafile->write(tmpdata);
+        if(tcp_obj->glazer_on){
+            tcp_obj->glazerfile->write(tmpdata);
+        }
+        //**********************************   数据包解析 ****************************************************
+        //************* 数据包包含4个部分：包序号（4字节，每字节小端先发）+mark（4字节，mark位于最小端最小bit位上）+通道数据（32*4字节，每字节小端先发）+脱落数据（8字节，展开为ch1p,ch2p,ch3p,...,ch32p,ch1n,ch2n,...,ch32n）
+        //*************
+        tcp_obj->wifiBuffer.append(tmpdata);
+        if(!tcp_obj->com_find_head){
+            //寻找包起始位置
+            int _packet_size = tcp_obj->packet_size+1;
+            if(tcp_obj->wifiBuffer.size()<_packet_size*3){
+                return;
+            }
+            int move_count=0;
+            while (move_count<_packet_size+1){
+                QByteArray _nbyte =  tcp_obj->wifiBuffer.left(_packet_size+4);//取1个包加4字节数据
+                unsigned int ch_number1 = (_nbyte[0]&0xFF)|((_nbyte[1]&0xFF)<<8)|((_nbyte[2]&0xFF)<<16)|((_nbyte[3]&0xFF)<<24);
+                unsigned int ch_number2 = (_nbyte[_packet_size]&0xFF)|((_nbyte[_packet_size+1]&0xFF)<<8)|((_nbyte[_packet_size+2]&0xFF)<<16)|((_nbyte[_packet_size+3]&0xFF)<<24);
+                if(ch_number1+1 == ch_number2){
+                    packet_number_last = ch_number1;
+                    tcp_obj->wifiBuffer.remove(0,_packet_size);
+                    break;
+                }
+                tcp_obj->wifiBuffer.remove(0,1);
+                move_count++;
+            }
+            if(move_count >= (_packet_size+1)){
+                qDebug()<<"Error: can not find data packet head";
+                return;
+            }
+            tcp_obj->com_find_head = true;
+        }
+        while(tcp_obj->wifiBuffer.size()>=tcp_obj->packet_size+1){//包长度：4+4+4*通道数+8=144。由于Tcp传输中自行拆包为不同长短的包进行传输，这里等待足够一包的数据量后进行处理
+            //包序号检测
+            QByteArray packet_head_4_byte =  tcp_obj->wifiBuffer.left(4);
+            unsigned int packet_number_now = (packet_head_4_byte[0]&0xFF)|((packet_head_4_byte[1]&0xFF)<<8)|((packet_head_4_byte[2]&0xFF)<<16)|((packet_head_4_byte[3]&0xFF)<<24);;
+            if(packet_number_last+1!=packet_number_now){
+                tcp_obj->com_find_head = false;
+                return;
+            }
+            packet_number_last = packet_number_now;
+            tcp_obj->wifiBuffer.remove(0,4);
+            //移除前3个字节冗余
+            tcp_obj->wifiBuffer.remove(0,3);
+            //获取一个字节，目前仅8bit中的最低位代表标记信息，1有效，其他位均为0，即不做处理
+            bool ok;
+            qint8 mark_tmp = tcp_obj->wifiBuffer.left(1).toHex().toInt(&ok,16);
+            tcp_obj->wifiBuffer.remove(0,1);
+            tcp_obj->mark.append(mark_tmp);
+            if(tcp_obj->channel_number<32){
+                for(int channel = 0 ; channel<tcp_obj->channel_number; ++channel){
+                     QByteArray _4byte =  tcp_obj->wifiBuffer.left(4);//取4个字节
+                     tcp_obj->wifiBuffer.remove(0,4);//从buffer中删去读取的4个字节
+                     int perchannel_data = (_4byte[0]&0x000000FF)|((_4byte[1]&0x000000FF)<<8)|((_4byte[2]&0x000000FF)<<16)|((_4byte[3]&0x000000FF)<<24);
+                     double r4 = ((double)perchannel_data)/24.0;//24倍增益
+                     tcp_obj->data_from_wifi.append(r4);//将QBytearray转换成double存入队列
+                }
+                //读取8字节电极脱落数据,每字节8bit ,含8通道 p或n状态
+                //elect_lead_off[64] 为：ch1p,ch2p,ch3p,...,ch32p,ch1n,ch2n,...,ch32n
+                QByteArray _8byte =  tcp_obj->wifiBuffer.left(8);
+                tcp_obj->wifiBuffer.remove(0,8);
+                for (int i=0; i<tcp_obj->channel_number*2; ++i){
+                    tcp_obj->elect_lead_off.append(_8byte[i/8] & (1<<i));
+                }
+            }
+            else{
+                int times_32channel = tcp_obj->channel_number/32;
+                for(int channel32count = 0; channel32count<times_32channel; ++channel32count){
+                    //填充通道数据
+                    for(int channel = 0 ; channel<32; ++channel){
+                         QByteArray _4byte =  tcp_obj->wifiBuffer.left(4);//取4个字节
+                         tcp_obj->wifiBuffer.remove(0,4);//从buffer中删去读取的4个字节
+                         int perchannel_data = (_4byte[0]&0x000000FF)|((_4byte[1]&0x000000FF)<<8)|((_4byte[2]&0x000000FF)<<16)|((_4byte[3]&0x000000FF)<<24);
+                         double r4 = ((double)perchannel_data)/24.0;//24倍增益
+                         tcp_obj->data_from_wifi.append(r4);//将QBytearray转换成double存入队列
+                    }
+                    //读取8字节电极脱落数据,每字节8bit ,含8通道 p或n状态
+                    //elect_lead_off[64] 为：ch1p,ch2p,ch3p,...,ch32p,ch1n,ch2n,...,ch32n
+                    for (int i = 0; i<8; ++i){
+                        bool ok;
+                        qint8 _1byte = tcp_obj->wifiBuffer.left(1).toHex().toInt(&ok,16);
+                        tcp_obj->wifiBuffer.remove(0,1);
+                        if(!ok){
+                            qDebug("can not convert lead off data");
+                        }
+                        else{
+                            tcp_obj->elect_lead_off.append(_1byte&0x01);
+                            tcp_obj->elect_lead_off.append(_1byte&0x02);
+                            tcp_obj->elect_lead_off.append(_1byte&0x04);
+                            tcp_obj->elect_lead_off.append(_1byte&0x08);
+                            tcp_obj->elect_lead_off.append(_1byte&0x10);
+                            tcp_obj->elect_lead_off.append(_1byte&0x20);
+                            tcp_obj->elect_lead_off.append(_1byte&0x40);
+                            tcp_obj->elect_lead_off.append(_1byte&0x80);
+                         }
+                    }
+                }
+            }
+            //移除累加和校验
+            tcp_obj->wifiBuffer.remove(0,1);
+        }
+        //*************
+        //***************************      数据包解析结束        ********************
+        if(tcp_obj->datafile->size()>100000000){
+            tcp_obj->datafile->close();
+            tcp_obj->hasSetupNewFile = false;
+        }
+    }
 }
