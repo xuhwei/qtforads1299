@@ -6,6 +6,13 @@ PortSet::PortSet(QVector<QString> &port_name, QSerialPort *port, QWidget *parent
     ui(new Ui::PortSet)
 {
     ui->setupUi(this);
+
+    QString config_file_name = "config.ini";
+    QSettings *p_ini = new QSettings(config_file_name,QSettings::IniFormat);
+    ui->bandrate->setText(p_ini->value("band_rate").toString());
+    ui->data_bit->setCurrentIndex(p_ini->value("data_bit_index").toInt());
+    ui->stop_bit->setCurrentIndex(p_ini->value("stop_bit_index").toInt());
+
     serial_port = port;
     for(QVector<QString>::iterator it= port_name.begin(); it!= port_name.end(); ++it){
         ui->port_name->addItem(*it);
@@ -19,6 +26,8 @@ PortSet::~PortSet()
 }
 
 void PortSet::update_arg(){
+    updateIniFile();
+
     serial_port->close();
     serial_port->setPortName(ui->port_name->currentText());
     serial_port->setBaudRate(qint32(ui->bandrate->text().toInt()));
@@ -52,5 +61,14 @@ void PortSet::update_arg(){
     }
     serial_port->setParity(QSerialPort::NoParity);
     serial_port->setFlowControl(QSerialPort::NoFlowControl);
+
     emit portSetDone();
+}
+void PortSet::updateIniFile(){
+    QString config_file_name = "config.ini";
+    QSettings *p_ini = new QSettings(config_file_name,QSettings::IniFormat);
+    p_ini->setValue("band_rate", ui->bandrate->text().toInt());
+    p_ini->setValue("data_bit_index", ui->data_bit->currentIndex());
+    p_ini->setValue("stop_bit_index", ui->stop_bit->currentIndex());
+    delete p_ini;
 }

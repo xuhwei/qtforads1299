@@ -44,7 +44,7 @@
      <item>
       <widget class="QLineEdit" name="bandrate">
        <property name="text">
-        <string>1152000</string>
+        <string>2304000</string>
        </property>
       </widget>
      </item>
@@ -98,12 +98,12 @@
       <widget class="QComboBox" name="stop_bit">
        <item>
         <property name="text">
-         <string>2</string>
+         <string>1</string>
         </property>
        </item>
        <item>
         <property name="text">
-         <string>1</string>
+         <string>2</string>
         </property>
        </item>
       </widget>

@@ -31,14 +31,14 @@ MainWindow::MainWindow(QWidget *parent) :
     channel_enable_map.resize(MAX_CHANNEL_NUMBER);
     initVectorDrawFrame();
     initVectorQCheckBox();
-
+    //初始化配置
     find_com = false;
-    port_bandrate = 115200;
     serial_port = new QSerialPort();
 
     ip = "10.10.10.1";
     port = 61613;
     ui->Port_lineEdit->setText("61613");
+
     notchFilter = false;
     bandFilter = false;
     hpassFilter = true;
@@ -47,23 +47,14 @@ MainWindow::MainWindow(QWidget *parent) :
     rms_w_length = 0;
     fl_bandPass = 1.0;
     fh_bandPass = 50.0;
-    per_channel_number = 100;//为了计算FFT,请保证能整除1000；不推荐修改
-    channel_number = 32;
-    sampleRate = 1000.0;
+    per_channel_number = 125;//为了计算FFT,请保证能整除1000；不推荐修改
+    channel_number = 1;
+    sampleRate = 250.0;
     running = false;
     runFileData = false;
     singleElectMode = false;
 
-
-    connect(ui->sampleRate_comboBox,SIGNAL(currentIndexChanged(int)),this,SLOT(changeSampleRate()));
-    connect(ui->openfile_action, &QAction::triggered, this, &MainWindow::openfile);
-    connect(ui->setChannel,SIGNAL(triggered(bool)),this,SLOT(openChannelSetWidget()));
-    connect(ui->setFFT,SIGNAL(triggered(bool)),this,SLOT(openFFTSetWidget()));
-    connect(ui->stft,SIGNAL(triggered(bool)),this,SLOT(openSTFTWidget()));
-    connect(ui->set_port,SIGNAL(triggered(bool)),this,SLOT(openPortSetWidget()));
-
     //给data,elec_off_p,elec_off_n分配空间
-
     data.resize(channel_number);
     for(int i=0;i<channel_number;i++){
         data[i].resize(per_channel_number);
@@ -73,13 +64,9 @@ MainWindow::MainWindow(QWidget *parent) :
     mark.resize(per_channel_number);
 
     dataProcess = new SignalProcess(channel_number,per_channel_number,sampleRate);
-    tcp = new TcpConnect(ip,port,Tcp_server,channel_number,ui->command_return_label);
-    connect(this->tcp,SIGNAL(boardStart()),this,SLOT(connectToBardDone()));
+    tcp = new CommnicateBoard(ip,port,Tcp_server,channel_number,ui->command_return_label);
+    connect(this->tcp,SIGNAL(signal_board_start()),this,SLOT(connectToBardDone()));
 
-    ui->amplititude_comboBox->setCurrentIndex(3);
-    ui->time_comboBox->setCurrentIndex(2);
-    ui->sampleRate_comboBox->setCurrentIndex(2);
-    ui->comboBox_channel_number->setCurrentIndex(5);
     ui->stopButton->setEnabled(false);
     ui->hpass_checkBox->setCheckState(Qt::CheckState::Checked);
     ui->glazer_start->setEnabled(false);
@@ -96,29 +83,67 @@ MainWindow::MainWindow(QWidget *parent) :
     fft_xmin = 0; fft_xmax = 100; fft_ymin = 0; fft_ymax = 1000;
     initFFTWidget(fft_selfControl,fft_xmin,fft_xmax,fft_ymin,fft_ymax);
 
+    //链接槽函数
+    connect(ui->sampleRate_comboBox,SIGNAL(currentIndexChanged(int)),this,SLOT(changeSampleRate()));
+    connect(ui->comboBox_channel_number,SIGNAL(currentIndexChanged(int)),this,SLOT(changeChannelNumber()));
+    connect(ui->openfile_action, &QAction::triggered, this, &MainWindow::openfile);
+    connect(ui->setChannel,SIGNAL(triggered(bool)),this,SLOT(openChannelSetWidget()));
+    connect(ui->setFFT,SIGNAL(triggered(bool)),this,SLOT(openFFTSetWidget()));
+    connect(ui->stft,SIGNAL(triggered(bool)),this,SLOT(openSTFTWidget()));
+    connect(ui->setConnect,SIGNAL(triggered(bool)),this,SLOT(openConnectSetWidget()));
+    connect(ui->set_port,SIGNAL(triggered(bool)),this,SLOT(openPortSetWidget()));
+    connect(ui->change_freq, SIGNAL(triggered(bool)),this,SLOT(changePwmFreq()));
+    connect(ui->open_debug_win,SIGNAL(triggered(bool)),this,SLOT(openDebugWidget()));
+
+    //读取默认配置
+    QString config_file_name = "config.ini";
+    QFileInfo config_file_info(config_file_name);
+    if(!config_file_info.isFile()){
+        QSettings *p_ini = new QSettings(config_file_name,QSettings::IniFormat);
+        p_ini->setValue("sample_rate_index", 2);
+        p_ini->setValue("channel_number_index", 5);
+        p_ini->setValue("band_rate", 2304000);
+        p_ini->setValue("data_bit_index", 0);
+        p_ini->setValue("stop_bit_index", 0);
+        p_ini->setValue("amplititude_scale_index", 3);
+        p_ini->setValue("time_scale_index", 2);
+        delete p_ini;
+    }
+    QSettings *p_ini = new QSettings(config_file_name,QSettings::IniFormat);
+    ui->sampleRate_comboBox->setCurrentIndex(p_ini->value("sample_rate_index").toInt());
+    ui->comboBox_channel_number->setCurrentIndex(p_ini->value("channel_number_index").toInt());
+    ui->amplititude_comboBox->setCurrentIndex(p_ini->value("amplititude_scale_index").toInt());
+    ui->time_comboBox->setCurrentIndex(p_ini->value("time_scale_index").toInt());
+    //需要手动触发一次槽函数
+    changeSampleRate();
+    changeChannelNumber();
+    changeAmplititude();
+    changeTimeScale();
+    delete p_ini;
 }
 
 MainWindow::~MainWindow()
 {
-    if(tcp->startBoard){
+    updateIniFile();
+    if(tcp->m_has_start_board){
         QByteArray data_send;
         data_send.append(static_cast<char>(0xaa));
         data_send.append(static_cast<char>(0x06));
         data_send.append(static_cast<char>(0x00));
-        tcp->sendToBoard(data_send);
+        tcp->send_to_board(data_send);
     }
-    if(serial_port!=NULL){
+    if(serial_port!=nullptr){
         delete serial_port;
-        serial_port = NULL;
+        serial_port = nullptr;
     }
     delete readFile;
     delete tcp;
     delete dataProcess;
     delete ui;
-    readFile =NULL;
-    tcp = NULL;
-    dataProcess =NULL;
-    ui = NULL;
+    readFile =nullptr;
+    tcp = nullptr;
+    dataProcess =nullptr;
+    ui = nullptr;
 }
 
 //初始化绘图部件容器
@@ -147,7 +172,7 @@ void MainWindow::changeSavePath()
 {
     QString saveFilePath = QFileDialog::getExistingDirectory(this,tr("saveDir"),tr("c:/"),QFileDialog::ShowDirsOnly);
     ui->savepath_label->setText(saveFilePath);
-    tcp->setStorePath(saveFilePath);
+    tcp->set_store_path(saveFilePath);
 }
 /***************  UI 槽函数***********
  *   使能陷波器
@@ -244,7 +269,7 @@ void MainWindow::changeRMS(){
  *   glazer评估启动标识
  */
 void MainWindow::glazerStart(){
-    glazerfilename = tcp->setGlazerOnOff(true);
+    glazerfilename = tcp->set_glazer_on(true);
     ui->glazer_start->setEnabled(false);
     ui->glazer_stop->setEnabled(true);
     ui->glazer_result->setEnabled(false);
@@ -255,7 +280,7 @@ void MainWindow::glazerStart(){
  *   glazer评估结束标识
  */
 void MainWindow::glazerEnd(){
-    tcp->setGlazerOnOff(false);
+    tcp->set_glazer_on(false);
     ui->glazer_start->setEnabled(true);
     ui->glazer_stop->setEnabled(false);
     ui->glazer_result->setEnabled(true);
@@ -263,7 +288,7 @@ void MainWindow::glazerEnd(){
     glazertimer->quit();
     glazertimer->wait();
     delete glazertimer;
-    glazertimer = NULL;
+    glazertimer = nullptr;
     stop_m();
 }
 /***************  UI 槽函数***********
@@ -279,7 +304,7 @@ void MainWindow::glazerResult(){
 void MainWindow::getPort(){
     port = static_cast<quint16>(ui->Port_lineEdit->text().toInt(nullptr,10));
     ui->statusbar->showMessage("Port= "+ QString::number(port,10));
-    tcp->updatePort(port);
+    tcp->wifi_update_port(port);
 }
 /***************  UI 槽函数***********
  *   获取TCP连接IP
@@ -287,7 +312,7 @@ void MainWindow::getPort(){
 void MainWindow::getIp(){
     ip = ui->IP_lineEdit->text();
     ui->statusbar->showMessage("IP="+ip);
-    tcp->updateIp(ip);
+    tcp->wifi_update_ip(ip);
 }
 /***************  UI 槽函数***********
  *   修改幅度量程
@@ -392,13 +417,13 @@ void MainWindow::changeSampleRate(){
     default: sampleRate = 1000.0;index+=4;per_channel_number = 250;//200
     }
     ui->statusbar->showMessage("SampleRate: " + QString::number(sampleRate,'f',1)+"Hz");
-    if(tcp->startBoard){
+    if(tcp->m_has_start_board){
         QByteArray data_send;
         data_send.append(static_cast<char>(0xaa));
         data_send.append(static_cast<char>(0x03));
         data_send.append(static_cast<char>(0x01));
         data_send.append(static_cast<char>(index));
-        tcp->sendToBoard(data_send);
+        tcp->send_to_board(data_send);
         tcp->flush();
     }
 
@@ -414,9 +439,9 @@ void MainWindow::changeSampleRate(){
  *   启动TCP连接
  */
 void MainWindow::connectWifi(){
-    tcp->server_connectToBoard();
+    tcp->wifi_server_connect_board();
     /*如果是客户端
-     * tcp = new TcpConnect(ip,port,Tcp_client);
+     * tcp = new CommnicateBoard(ip,port,Tcp_client);
      * tcp->client_connectToBoard();
      */
 }
@@ -424,7 +449,7 @@ void MainWindow::connectWifi(){
  *   切换单 、双电极接法
  */
 void MainWindow::changeSingleBipolarElect(){
-    if(tcp->startBoard){
+    if(tcp->m_has_start_board){
         if(!singleElectMode){
             int channel_addr = 0x05;
             for(int i = 0 ;i <8; ++i){
@@ -433,7 +458,7 @@ void MainWindow::changeSingleBipolarElect(){
                 data_send.append(static_cast<char>(0x03));
                 data_send.append(static_cast<char>(channel_addr));
                 data_send.append(static_cast<char>(0x68));
-                tcp->sendToBoard(data_send);
+                tcp->send_to_board(data_send);
                 channel_addr++;
                 QTime timer = QTime::currentTime().addMSecs(25);
                 while( QTime::currentTime() < timer )
@@ -450,7 +475,7 @@ void MainWindow::changeSingleBipolarElect(){
                 data_send.append(static_cast<char>(0x03));
                 data_send.append(static_cast<char>(channel_addr));
                 data_send.append(static_cast<char>(0x60));
-                tcp->sendToBoard(data_send);
+                tcp->send_to_board(data_send);
                 channel_addr++;
                 QTime timer = QTime::currentTime().addMSecs(25);
                 while( QTime::currentTime() < timer )
@@ -477,12 +502,12 @@ void MainWindow::stop_m(){
     if(rms_enable && ui->glazer_stop->isEnabled()){
         glazerEnd();
     }
-    if(tcp->startBoard){
+    if(tcp->m_has_start_board){
         QByteArray data_send;
         data_send.append(static_cast<char>(0xaa));
         data_send.append(static_cast<char>(0x06));
         data_send.append(static_cast<char>(0x00));
-        tcp->sendToBoard(data_send);
+        tcp->send_to_board(data_send);
     }
 }
 /***************  UI 槽函数***********
@@ -496,19 +521,33 @@ void MainWindow::run_m(){
     ui->command_return_checkBox->setCheckable(false);
     ui->command_return_checkBox->setEnabled(false);
     ui->comboBox_channel_number->setEnabled(false);
-    tcp->commandReturn = false;
+    tcp->m_command_return_mode = false;
 
-    if(!tcp->startBoard){
+    if(!tcp->m_has_start_board){
         /***************   使用文件读取的数据绘图     *******************/
         if(runFileData){
             QMessageBox::information(this,"","将使用选中文件内数据绘图");
             int boradNumber = channel_number/32;
-            unsigned int numberToRead = static_cast<unsigned int>((4 + 4 + (32*4 +8)*boradNumber)*per_channel_number);
+            unsigned int numberToRead = 0;//一个包的字节长度
+            int serial_check = 0;
+            //串口多一字节校验累加和，通道数小于32的情况有别于通道数大于32的情况
+            QStringList tmp = readFilePath.split("/");
+            if(tmp.last().startsWith("serial_")){
+                serial_check = 1;
+            }
+            else{
+                serial_check = 0;
+            }
+            if(channel_number<32){
+                numberToRead = static_cast<unsigned int>((4+4+4*channel_number + 8 + serial_check)*per_channel_number);
+            }
+            else{
+                numberToRead = static_cast<unsigned int>((4+4+(32*4 +8)*boradNumber+serial_check)*per_channel_number);
+            }
+            char *_n_channel_data = new char[numberToRead];
             while(running){
                 //读取依次为 4字节编号，4字节冗余（最后一个bit为mark），channel_number*4字节通道数据，8字节电极脱落数据
-                char _32_channel_data[numberToRead];
-
-                if(numberToRead != readFile->read(_32_channel_data,numberToRead)){
+                if(numberToRead != readFile->read(_n_channel_data,numberToRead)){
                     QMessageBox::information(this,"","读取结束");
                     readFile->close();
                     running = false;
@@ -524,11 +563,11 @@ void MainWindow::run_m(){
                     }
                     //读取数据
                     QQueue<bool> elect_off_bool;
-                    for(int j = 0; j< per_channel_number ;++j){
-                        for(int _32count = 0; _32count < boradNumber; ++_32count){
+                    if(channel_number<32){
+                        for(int j = 0; j< per_channel_number ;++j){
                             //处理电极脱落部分，8字节共计64bit 转为64个布尔值
                             for(int _8byte = 0; _8byte<8; ++_8byte){
-                                unsigned char byte = static_cast<unsigned char>(_32_channel_data[(8 + (32*4 +8)*boradNumber)*j+ 8 + (32*4 +8)*_32count + _8byte]);
+                                unsigned char byte = static_cast<unsigned char>(_n_channel_data[j*(8+channel_number*4 +8+serial_check)+8+channel_number*4+_8byte]);
                                 elect_off_bool.append(byte&0x01);
                                 elect_off_bool.append(byte&0x02);
                                 elect_off_bool.append(byte&0x04);
@@ -538,24 +577,52 @@ void MainWindow::run_m(){
                                 elect_off_bool.append(byte&0x40);
                                 elect_off_bool.append(byte&0x80);
                             }
-                            for(int channel = 0; channel<32; ++channel){
+                            for(int channel = 0; channel<channel_number; ++channel){
                                 //补码转换为有符号int，直接转换
-                                int perchannel_data = (_32_channel_data[j*(8 + (32*4 +8)*boradNumber)+8+channel*4]&0x000000FF)|
-                                                     ((_32_channel_data[j*(8 + (32*4 +8)*boradNumber)+8+channel*4+1]&0x000000FF)<<8)|
-                                                     ((_32_channel_data[j*(8 + (32*4 +8)*boradNumber)+8+channel*4+2]&0x000000FF)<<16)|
-                                                     ((_32_channel_data[j*(8 + (32*4 +8)*boradNumber)+8+channel*4+3]&0x000000FF)<<24);
-                                data[32*_32count+channel][j] = static_cast<double>(perchannel_data)/24.0;//增益24
-                                elect_off_p[32*_32count+channel] =  elect_off_p[32*_32count+channel]|| elect_off_bool.front();
+                                int perchannel_data = (_n_channel_data[j*(8+channel_number*4+8+serial_check)+8+channel*4]&0x000000FF)|
+                                                     ((_n_channel_data[j*(8+channel_number*4+8+serial_check)+8+channel*4+1]&0x000000FF)<<8)|
+                                                     ((_n_channel_data[j*(8+channel_number*4+8+serial_check)+8+channel*4+2]&0x000000FF)<<16)|
+                                                     ((_n_channel_data[j*(8+channel_number*4+8+serial_check)+8+channel*4+3]&0x000000FF)<<24);
+                                data[channel][j] = static_cast<double>(perchannel_data)/24.0;//增益24
+                                //elect_off_p[32*_32count+channel] =  elect_off_p[32*_32count+channel]|| elect_off_bool.front();
                                 elect_off_bool.pop_front();
-                                elect_off_n[channel_number - 32*_32count - channel - 1] =  elect_off_n[channel_number - 32*_32count - channel - 1]|| elect_off_bool.back();
+                                //elect_off_n[channel_number - 32*_32count - channel - 1] =  elect_off_n[channel_number - 32*_32count - channel - 1]|| elect_off_bool.back();
                                 elect_off_bool.pop_back();
                             }
+                            mark[j] = _n_channel_data[(8+channel_number*4 +8+serial_check)*j + 7];
                         }
-                        mark[j] = _32_channel_data[(8 + (32*4 +8)*boradNumber)*j + 7];
                     }
-
-
-
+                    else{
+                        for(int j = 0; j< per_channel_number ;++j){
+                            for(int _32count = 0; _32count < boradNumber; ++_32count){
+                                //处理电极脱落部分，8字节共计64bit 转为64个布尔值
+                                for(int _8byte = 0; _8byte<8; ++_8byte){
+                                    unsigned char byte = static_cast<unsigned char>(_n_channel_data[(8 + (32*4 +8)*boradNumber+serial_check)*j+ 8 + (32*4 +8)*_32count + _8byte]);
+                                    elect_off_bool.append(byte&0x01);
+                                    elect_off_bool.append(byte&0x02);
+                                    elect_off_bool.append(byte&0x04);
+                                    elect_off_bool.append(byte&0x08);
+                                    elect_off_bool.append(byte&0x10);
+                                    elect_off_bool.append(byte&0x20);
+                                    elect_off_bool.append(byte&0x40);
+                                    elect_off_bool.append(byte&0x80);
+                                }
+                                for(int channel = 0; channel<32; ++channel){
+                                    //补码转换为有符号int，直接转换
+                                    int perchannel_data = (_n_channel_data[j*(8 + (32*4 +8)*boradNumber+serial_check)+8+channel*4]&0x000000FF)|
+                                                         ((_n_channel_data[j*(8 + (32*4 +8)*boradNumber+serial_check)+8+channel*4+1]&0x000000FF)<<8)|
+                                                         ((_n_channel_data[j*(8 + (32*4 +8)*boradNumber+serial_check)+8+channel*4+2]&0x000000FF)<<16)|
+                                                         ((_n_channel_data[j*(8 + (32*4 +8)*boradNumber+serial_check)+8+channel*4+3]&0x000000FF)<<24);
+                                    data[32*_32count+channel][j] = static_cast<double>(perchannel_data)/24.0;//增益24
+                                    //elect_off_p[32*_32count+channel] =  elect_off_p[32*_32count+channel]|| elect_off_bool.front();
+                                    elect_off_bool.pop_front();
+                                    //elect_off_n[channel_number - 32*_32count - channel - 1] =  elect_off_n[channel_number - 32*_32count - channel - 1]|| elect_off_bool.back();
+                                    elect_off_bool.pop_back();
+                                }
+                            }
+                            mark[j] = _n_channel_data[(8 + (32*4 +8)*boradNumber+serial_check)*j + 7];
+                        }
+                    }
                     dataProcess->runProcess(data);
                     dataProcess->runFFT();
                     for(int channel = 0; channel < channel_number; ++channel){
@@ -578,6 +645,7 @@ void MainWindow::run_m(){
                         QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
                 }
             }
+            delete [] _n_channel_data;
         }
         /**************   生成模拟正弦波并画图*******************/
         else{
@@ -651,7 +719,7 @@ void MainWindow::run_m(){
         data_send.append(static_cast<char>(0xaa));
         data_send.append(static_cast<char>(0x06));
         data_send.append(static_cast<char>(0x01));
-        tcp->sendToBoard(data_send);
+        tcp->send_to_board(data_send);
 
         while(running){
              if(tcp->data_from_wifi.size() > per_channel_number*channel_number){
@@ -711,7 +779,7 @@ void MainWindow::run_m(){
  *   向板子发送命令
  */
 void MainWindow::sendCommand(){
-    if(tcp->startBoard){
+    if(tcp->m_has_start_board){
         QByteArray c_send;
         QStringList command = ui->command_lineEdit->text().split(" ");
         if(command.size()>1){
@@ -719,7 +787,7 @@ void MainWindow::sendCommand(){
                 bool ok;
                 c_send.append(static_cast<char>(command[i].toInt(&ok,16)));
             }
-            tcp->sendToBoard(c_send);
+            tcp->send_to_board(c_send);
         }
     }
     else{
@@ -733,9 +801,9 @@ void MainWindow::sendCommand(){
  */
 void MainWindow::changeCommandReturn(){
     if(Qt::Checked == ui->command_return_checkBox->checkState())
-        tcp->commandReturn = true;
+        tcp->m_command_return_mode = true;
     else if(Qt::Unchecked == ui->command_return_checkBox->checkState())
-        tcp->commandReturn = false;
+        tcp->m_command_return_mode = false;
 }
 /***************  UI 槽函数***********
  *   打开帮助说明窗口
@@ -764,7 +832,8 @@ void MainWindow::openChannelSetWidget(){
 /***************  UI 槽函数***********
  *   更改通道数
  */
-void MainWindow::changeChannelNumber(int index){
+void MainWindow::changeChannelNumber(){
+    int index = ui->comboBox_channel_number->currentIndex();
     switch(index){
         case 0: channel_number = 1;break;
         case 1: channel_number = 2;break;
@@ -816,9 +885,15 @@ void MainWindow::changeChannelNumber(int index){
     for(int i =0; i<channel_number; ++i){
         checkbox[i]->setChecked(true);
     }
+    initFFTWidget(fft_selfControl,fft_xmin,fft_xmax,fft_ymin,fft_ymax);//更新FFT配置
+    changeAmplititude();//为窗口部件更新设置
+    changeTimeScale();
+    for(int i=channel_number; i<=MAX_CHANNEL_NUMBER-1;++i){
+        drawframe[i]->refreshPixmap();
+    }
     //更新实例化对象参数
     dataProcess->setChArg(channel_number, per_channel_number);
-    tcp->setChArg(channel_number);
+    tcp->set_channel_Arg(channel_number);
     //更新容器
     data.resize(channel_number);
     for(int i=0;i<channel_number;i++){
@@ -827,7 +902,7 @@ void MainWindow::changeChannelNumber(int index){
     elect_off_p.resize(channel_number);
     elect_off_n.resize(channel_number);
 
-    if(tcp->startBoard){
+    if(tcp->m_has_start_board){
         // aa 07 通道数
         // 通道数从1开始，256通道发送0x00
         int ch_to_send = channel_number;
@@ -838,7 +913,7 @@ void MainWindow::changeChannelNumber(int index){
         data_send.append(static_cast<char>(0xaa));
         data_send.append(static_cast<char>(0x07));
         data_send.append(static_cast<char>(ch_to_send));
-        tcp->sendToBoard(data_send);
+        tcp->send_to_board(data_send);
         tcp->flush();
     }
 }
@@ -847,12 +922,12 @@ void MainWindow::changeChannelNumber(int index){
  *   解决关闭程序时，如果绘制还未完成，后台程序未退出问题
  */
 void MainWindow::closeEvent(QCloseEvent*){
-    if(tcp->startBoard){
+    if(tcp->m_has_start_board){
         QByteArray data_send;
         data_send.append(static_cast<char>(0xaa));
         data_send.append(static_cast<char>(0x06));
         data_send.append(static_cast<char>(0x00));
-        tcp->sendToBoard(data_send);
+        tcp->send_to_board(data_send);
     }
     running = false;
 }
@@ -884,14 +959,14 @@ bool MainWindow::nativeEventFilter(const QByteArray &eventType, void *message, l
 void MainWindow::openfile(){
     QString filePath = QFileDialog::getOpenFileName();
     if(QMessageBox::Ok == QMessageBox::information(this,"确认选择的文件",QString(tr("选中的文件为："))+filePath,QMessageBox::Ok|QMessageBox::Cancel,QMessageBox::Cancel)){
-        if(tcp->startBoard){
-            QMessageBox::warning(this,"警告","目前正通过无线接收数据，请先断开连接再尝试操作");
+        if(tcp->m_has_start_board){
+            QMessageBox::warning(this,"警告","目前正在接收数据，请先断开连接再尝试操作");
         }
         else{
             runFileData = true;
             readFilePath = filePath;
             delete readFile;
-            readFile = NULL;
+            readFile = nullptr;
             readFile = new QFile(filePath);
             if(!readFile->open(QIODevice::ReadOnly)){
                 QMessageBox::warning(this,"警告","打开文件失败");
@@ -963,10 +1038,11 @@ void MainWindow::initFFTWidget(bool selfControl,double xmin,double xmax,double y
     pen[29].setColor(QColor(0,178,238));
     pen[30].setColor(QColor(0,135,206,255));
     pen[31].setColor(QColor(104,34,139));
+    ui->FFTWidget->clearGraphs();
     for(int i =0; i<channel_number; ++i){
         ui->FFTWidget->addGraph();
         ui->FFTWidget->graph(i)->setPen(pen[i%32]);
-    }
+    } 
 }
 /**** FFT绘图 *****/
 void MainWindow::drawFFT(){
@@ -980,7 +1056,7 @@ void MainWindow::drawFFT(){
         else
             ui->FFTWidget->graph(i)->setVisible(false);
     }
-    for(int i =channel_fft; i<32; ++i){
+    for(int i =channel_fft; i<channel_number; ++i){
         ui->FFTWidget->graph(i)->setVisible(false);
     }
     if(fft_selfControl)
@@ -989,9 +1065,10 @@ void MainWindow::drawFFT(){
 }
 
 void MainWindow::openSTFTWidget(){
-    if(!stft_window)
+    if(!stft_window){
         delete stft_window;
-        stft_window = NULL;
+        stft_window = nullptr;
+    }
     stft_window = new STFT;
     stft_window->show();
 }
@@ -999,7 +1076,49 @@ void MainWindow::openSTFTWidget(){
 void MainWindow::flush(){
     //pass
 }
-
+void MainWindow::openConnectSetWidget(){
+    if(!tcp->m_has_start_board){
+        QMessageBox::information(this,"","未连接硬件");
+        return;
+    }
+    if(tcp->m_connect_type == ConnectType::_no_connect){
+        QMessageBox::information(this,"","未连接硬件");
+        return;
+    }
+    QString tmpmsg;
+    int flag = 0; //1:wifi, 2:serial_com
+    if(tcp->m_connect_type == ConnectType::_wifi){
+        tmpmsg = tmpmsg + "目前连接方式是wifi, 将切换为串口。";
+        flag =1;
+    }
+    else if(tcp->m_connect_type == ConnectType::_serial_com){
+        //tmpmsg = tmpmsg + "目前连接方式是串口, 将切换为wifi。";
+        tmpmsg = tmpmsg + "目前连接方式是wifi, 将切换为串口。";
+        flag =2;
+    }
+    if(QMessageBox::Yes == QMessageBox::question(this,"提示",tmpmsg)){
+        if(flag==1){
+            QByteArray data_send;
+            data_send.append(static_cast<char>(0xaa));
+            data_send.append(static_cast<char>(0x08));
+            data_send.append(static_cast<char>(0x01));
+            tcp->send_to_board(data_send);
+            //delete tcp;
+            //tcp = new CommnicateBoard(ip,port,Tcp_server,channel_number,ui->command_return_label);
+            //QMessageBox::information(this,"","已切换至串口，请配置串口");
+        }
+        else if(flag==2){
+            QByteArray data_send;
+            data_send.append(static_cast<char>(0xaa));
+            data_send.append(static_cast<char>(0x08));
+            data_send.append(static_cast<char>(0x02));
+            tcp->send_to_board(data_send);
+            delete tcp;
+            tcp = new CommnicateBoard(ip,port,Tcp_server,channel_number,ui->command_return_label);
+            QMessageBox::information(this,"","已切换至wifi，请执行连接操作");
+        }
+    }
+}
 void MainWindow::openPortSetWidget(){
     scanPort();
     PortSet portwidget(vector_port_name, serial_port);
@@ -1014,7 +1133,7 @@ void MainWindow::portSetDone(){
     }
     else{
         find_com = true;
-        tcp->start_com(serial_port);
+        tcp->com_start(serial_port);
     }
 }
 void MainWindow::initCom(){
@@ -1031,4 +1150,49 @@ void MainWindow::scanPort(){
     {
         vector_port_name.append(info.portName());
     }
+}
+
+void MainWindow::changePwmFreq(){
+    QDialog win;
+    QHBoxLayout hlayer;
+    QLabel label1;
+    label1.setText("PWM波频率");
+    QLabel label2;
+    label2.setText("Hz");
+    QSpinBox *spinBox=new QSpinBox;
+    spinBox->setRange(1,255);
+    QPushButton yes_bn;
+    yes_bn.setText("确认");
+    QObject::connect(&yes_bn,&QPushButton::clicked,[=](){
+        char val = static_cast<char>(spinBox->value());
+        QByteArray data_send;
+        data_send.append(static_cast<char>(0xaa));
+        data_send.append(static_cast<char>(0x09));
+        data_send.append(static_cast<char>(val));
+        tcp->send_to_board(data_send);
+    });
+    hlayer.addWidget(&label1);
+    hlayer.addWidget(spinBox);
+    hlayer.addWidget(&label2);
+    hlayer.addWidget(&yes_bn);
+    win.setLayout(&hlayer);
+    win.setWindowTitle("频率修改");
+    win.setGeometry(200,200,600,150);
+    win.show();
+    win.exec();
+
+}
+
+void MainWindow::updateIniFile(){
+    QString config_file_name = "config.ini";
+    QSettings *p_ini = new QSettings(config_file_name,QSettings::IniFormat);
+    p_ini->setValue("sample_rate_index", ui->sampleRate_comboBox->currentIndex());
+    p_ini->setValue("channel_number_index", ui->comboBox_channel_number->currentIndex());
+    p_ini->setValue("amplititude_scale_index", ui->amplititude_comboBox->currentIndex());
+    p_ini->setValue("time_scale_index", ui->time_comboBox->currentIndex());
+    delete p_ini;
+}
+
+void MainWindow::openDebugWidget(){
+    tcp->set_debug_on();
 }

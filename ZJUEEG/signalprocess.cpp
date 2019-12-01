@@ -42,18 +42,18 @@ SignalProcess::~SignalProcess(){
     free(fftout->data);
     free(fftout->size);
     delete fftout;
-    fftout = NULL;
+    fftout = nullptr;
     free(fftin->data);
     free(fftin->size);
     delete fftin;
-    fftin = NULL;
+    fftin = nullptr;
     for(int channel=0; channel<channel_number; ++channel){
         delete bp_filter[channel];
         delete bs_filter[channel];
         delete hp_filter[channel];
-        bp_filter[channel] =NULL;
-        bs_filter[channel] =NULL;
-        hp_filter[channel] =NULL;
+        bp_filter[channel] =nullptr;
+        bs_filter[channel] =nullptr;
+        hp_filter[channel] =nullptr;
     }
 }
 
@@ -154,9 +154,9 @@ void SignalProcess::setChArg(int ch_number, int per_channel_number){
             delete bp_filter[channel];
             delete bs_filter[channel];
             delete hp_filter[channel];
-            bp_filter[channel] = NULL;
-            bs_filter[channel] = NULL;
-            hp_filter[channel] = NULL;
+            bp_filter[channel] = nullptr;
+            bs_filter[channel] = nullptr;
+            hp_filter[channel] = nullptr;
         }
         free(fftout->data);
         free(fftin->data);

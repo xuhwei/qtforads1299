@@ -20,17 +20,23 @@ myframe::myframe(QWidget *parent):QWidget(parent)
     polyline_first = QPointF(pen_pos_x,pen_pos_y);
     mark0 = false;
     rms_enable = false;
-    amplititude_scale = 100;
-    time_scale = 1000;
+    amplititude_scale = 10;
+    time_scale = 500;
 }
 
 myframe::~myframe(){
+    if(pixmap!=nullptr){
+        delete pixmap;
+        pixmap = nullptr;
+    }
 }
 
 void myframe::paintEvent(QPaintEvent*)
 {
-    QStylePainter stylePainter(this);
-    stylePainter.drawPixmap(0, 0, pixmap);
+    if(pixmap!=nullptr){
+        QStylePainter stylePainter(this);
+        stylePainter.drawPixmap(0, 0, *pixmap);
+    }
     //qDebug("paintEvent");
 }
 void myframe::mousePressEvent(QMouseEvent*)
@@ -50,8 +56,9 @@ int myframe::hasDataToDraw(double sample_rate, QVector<double>& singlechannel_da
                            bool leadoff_p, bool leadoff_n)
 {
     //qDebug("hadDatoToDraw");
-    QPainter painter(&pixmap);
-    painter.initFrom(this);
+    QPainter painter(pixmap);
+    //painter.initFrom(this);
+    //painter.begin(this);
     painter.setPen(lineColor);
 
     int length = singlechannel_data.size();//数据长度
@@ -75,21 +82,21 @@ int myframe::hasDataToDraw(double sample_rate, QVector<double>& singlechannel_da
     else{
         x_interval=1000.0/sample_rate;//ms
     }
-    y_scale= (double)amplititude_scale;
-    x_scale= (double)time_scale ;
+    y_scale= static_cast<double>(amplititude_scale);
+    x_scale= static_cast<double>(time_scale);
     has_data_to_draw = true;
     //计算每两个点跨越多少时间(ms)范围（px）
-    double x_among_two_point = x_interval/(x_scale/(double)(width-10));
+    double x_among_two_point = x_interval/(x_scale/static_cast<double>(width-10));
     //qDebug("samplerate %f datasize %d x_among_2 %f",sample_rate,length,x_among_two_point);
     //计算每像素点（px）代表多少幅度(mv)
-    double y_perScale = 2*y_scale/(double)height;// 单位:uv/px
+    double y_perScale = 2*y_scale/static_cast<double>(height);// 单位:uv/px
     //擦除矩形，每画一次polyline，将要画的PolyLine x轴范围内矩形擦除。
     QRect eraseBlock(rect());
     //eraseBlock.adjust(0,1,0,1);
     double start_point = pen_pos_x;
-    double end_point = start_point + ((double)length)*x_among_two_point;
+    double end_point = start_point + static_cast<double>(length)*x_among_two_point;
     double start_point_left, start_point_right, end_point_left, end_point_right;
-    int remain_point = ((double)width-10.0-start_point)/x_among_two_point +1;//计算右边还能画下几个点,包括polyline_first
+    int remain_point = static_cast<int>((static_cast<double>(width)-10.0-start_point)/x_among_two_point) +1;//计算右边还能画下几个点,包括polyline_first
     if(remain_point<0){
         qDebug("remain_point out of range");
         clearParameter();
@@ -110,16 +117,16 @@ int myframe::hasDataToDraw(double sample_rate, QVector<double>& singlechannel_da
         //左边擦除矩形
         start_point_left = 5.0;
         end_point_left = 5.0+ (length + 1 - remain_point)*x_among_two_point;       
-        eraseBlock.setLeft(start_point_left);
-        eraseBlock.setRight(end_point_left);
+        eraseBlock.setLeft(static_cast<int>(start_point_left));
+        eraseBlock.setRight(static_cast<int>(end_point_left));
         painter.eraseRect(eraseBlock);
     }
     else{
         start_point_right = start_point;
         end_point_right = end_point;
     }
-    eraseBlock.setLeft(start_point_right);
-    eraseBlock.setRight(end_point_right);
+    eraseBlock.setLeft(static_cast<int>(start_point_right));
+    eraseBlock.setRight(static_cast<int>(end_point_right));
     painter.eraseRect(eraseBlock);
 
     double next_x,next_y;
@@ -133,9 +140,9 @@ int myframe::hasDataToDraw(double sample_rate, QVector<double>& singlechannel_da
             xposition[i] = next_x;
             //qDebug("height = %d",height);
             if(rms_enable)
-                next_y = height -  singlechannel_data[i-1]/y_perScale;
+                next_y = static_cast<double>(height) -  singlechannel_data[i-1]/y_perScale;
             else
-                next_y = (double)(height/2) -  singlechannel_data[i-1]/y_perScale;
+                next_y = static_cast<double>(height)/2.0 -  singlechannel_data[i-1]/y_perScale;
             polyline[i] = QPointF(next_x,next_y);
             //qDebug("x=%f,y=%f",next_x,next_y);
             pen_pos_x = next_x;
@@ -157,7 +164,7 @@ int myframe::hasDataToDraw(double sample_rate, QVector<double>& singlechannel_da
             if(rms_enable)
                 next_y = height -  singlechannel_data[i-1]/y_perScale;
             else
-                next_y = (double)(height/2) -  singlechannel_data[i-1]/y_perScale;
+                next_y = static_cast<double>(height)/2.0 -  singlechannel_data[i-1]/y_perScale;
             polyline[i] = QPointF(next_x,next_y);
             pen_pos_x = next_x;
             pen_pos_y = next_y;
@@ -177,7 +184,7 @@ int myframe::hasDataToDraw(double sample_rate, QVector<double>& singlechannel_da
             if(rms_enable)
                 next_y = height -  singlechannel_data[remain_point-2+i]/y_perScale;
             else
-                next_y = (double)(height/2) -  singlechannel_data[remain_point-2+i]/y_perScale;
+                next_y = static_cast<double>(height)/2.0 -  singlechannel_data[remain_point-2+i]/y_perScale;
             polyline_2[i] = QPointF(next_x,next_y);
             pen_pos_x = next_x;
             pen_pos_y = next_y;
@@ -190,15 +197,15 @@ int myframe::hasDataToDraw(double sample_rate, QVector<double>& singlechannel_da
     //Draw mark , number of point this time  ,plus last point in last drawing
     painter.setPen(Qt::red);
     if(mark0) {
-        painter.drawEllipse(xposition[0],height-10,4,4);
-        painter.drawEllipse(xposition[0],10,4,4);
-        painter.drawLine(QPoint(xposition[0]+2,height-10),QPoint(xposition[0]+2,14));
+        painter.drawEllipse(static_cast<int>(xposition[0]),height-10,4,4);
+        painter.drawEllipse(static_cast<int>(xposition[0]),10,4,4);
+        painter.drawLine(QPoint(static_cast<int>(xposition[0])+2,height-10),QPoint(static_cast<int>(xposition[0])+2,14));
     }
     for(int i = 1; i<length+1; ++i){
         if(mark[i-1]&0x01){
-            painter.drawEllipse(xposition[i],height-10,4,4);
-            painter.drawEllipse(xposition[i],10,4,4);
-            painter.drawLine(QPoint(xposition[i]+2,height-10),QPoint(xposition[i]+2,14));
+            painter.drawEllipse(static_cast<int>(xposition[i]),height-10,4,4);
+            painter.drawEllipse(static_cast<int>(xposition[i]),10,4,4);
+            painter.drawLine(QPoint(static_cast<int>(xposition[i])+2,height-10),QPoint(static_cast<int>(xposition[i])+2,14));
         }
     }
     mark0 = mark[length-1]&0x01;
@@ -256,20 +263,27 @@ int myframe::hasDataToDraw(double sample_rate, QVector<double>& singlechannel_da
     r.adjust(0, 0, -1, -1);
     painter.setPen(pen);
     painter.drawRect(r);
-
+    //painter.end();
     update();
+
     return 0;
 }
 
 void myframe::refreshPixmap()
 {
     // 建立双缓冲pixmap
-    pixmap =  QPixmap(size());
-    pixmap.fill();
+    if(pixmap == nullptr){
+        pixmap =  new QPixmap(size());
+    }
+    else{
+        delete pixmap;
+        pixmap =  new QPixmap(size());
+    }
+    pixmap->fill();
 
-    QPainter painter(&pixmap);
-    painter.initFrom(this);
-
+    QPainter painter(pixmap);
+    //painter.initFrom(this);
+    //painter.begin(this);
     // 清除
     painter.eraseRect(rect());
     clearParameter();
@@ -283,41 +297,45 @@ void myframe::refreshPixmap()
     painter.drawRect(r);
 
     //qDebug("w:%d,h:%d",width,height);
-
-    update();
+    //painter.end();
+    update();  
 }
 
 void myframe::refreshScale(){
-    QPainter painter(&pixmap);
-    painter.initFrom(this);
-    //清除 左侧scale和右下角scale标志
-    QRect eraseBlock(rect());
-    eraseBlock.setLeft(10);
-    eraseBlock.setRight(75);
-    eraseBlock.setTop(5);
-    eraseBlock.setBottom(height-5);
-    painter.eraseRect(eraseBlock);
-    eraseBlock.setLeft(width-80);
-    eraseBlock.setRight(width);
-    eraseBlock.setTop(height-15);
-    eraseBlock.setBottom(height-5);
-    painter.eraseRect(eraseBlock);
+    if(pixmap!=nullptr){
+        QPainter painter(pixmap);
+        //painter.begin(this);
+        //painter.initFrom(this);
+        //清除 左侧scale和右下角scale标志
+        QRect eraseBlock(rect());
+        eraseBlock.setLeft(10);
+        eraseBlock.setRight(75);
+        eraseBlock.setTop(5);
+        eraseBlock.setBottom(height-5);
+        painter.eraseRect(eraseBlock);
+        eraseBlock.setLeft(width-80);
+        eraseBlock.setRight(width);
+        eraseBlock.setTop(height-15);
+        eraseBlock.setBottom(height-5);
+        painter.eraseRect(eraseBlock);
 
-    painter.setPen(Qt::darkGray);
-    painter.drawLine(QPoint(0,height/2),QPoint(width,height/2));
-    painter.drawLine(QPoint(0,height/4),QPoint(width,height/4));
-    painter.drawLine(QPoint(0,3*height/4),QPoint(width,3*height/4));
-    if(rms_enable){
-        painter.drawText(10,height/2,QString::number(amplititude_scale)+"uV");
-        painter.drawText(10,height/4,QString::number(amplititude_scale*3/2)+"uV");
-        painter.drawText(10,3*height/4,QString::number(amplititude_scale/2)+"uV");
-        painter.drawText(width-80,height-5,QString::number(amplititude_scale*2)+"uV");
-    }
-    else{
-        painter.drawText(10,height/2,tr("0V"));
-        painter.drawText(10,height/4,QString::number(amplititude_scale/2)+"uV");
-        painter.drawText(10,3*height/4,"-"+QString::number(amplititude_scale/2)+"uV");
-        painter.drawText(width-80,height-5,"+/-"+QString::number(amplititude_scale)+"uV");
+        painter.setPen(Qt::darkGray);
+        painter.drawLine(QPoint(0,height/2),QPoint(width,height/2));
+        painter.drawLine(QPoint(0,height/4),QPoint(width,height/4));
+        painter.drawLine(QPoint(0,3*height/4),QPoint(width,3*height/4));
+        if(rms_enable){
+            painter.drawText(10,height/2,QString::number(amplititude_scale)+"uV");
+            painter.drawText(10,height/4,QString::number(amplititude_scale*3/2)+"uV");
+            painter.drawText(10,3*height/4,QString::number(amplititude_scale/2)+"uV");
+            painter.drawText(width-80,height-5,QString::number(amplititude_scale*2)+"uV");
+        }
+        else{
+            painter.drawText(10,height/2,tr("0V"));
+            painter.drawText(10,height/4,QString::number(amplititude_scale/2)+"uV");
+            painter.drawText(10,3*height/4,"-"+QString::number(amplititude_scale/2)+"uV");
+            painter.drawText(width-80,height-5,"+/-"+QString::number(amplititude_scale)+"uV");
+        }
+        //painter.end();
     }
 }
 

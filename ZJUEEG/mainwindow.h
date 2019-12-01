@@ -11,7 +11,7 @@
 #include <QSerialPort>
 #include <QSerialPortInfo>
 
-#include "tcpconnect.h"
+#include "connect.h"
 #include "signalprocess.h"
 #include "glazer.h"
 #include "qcustomplot/qcustomplot.h"
@@ -33,7 +33,7 @@ class MainWindow : public QMainWindow, public QAbstractNativeEventFilter
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = 0);
+    explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
 
@@ -42,7 +42,7 @@ public:
     QVector<bool> elect_off_n;
     QVector<qint8> mark;
     QVector<QString> vector_port_name;
-    QSerialPort *serial_port = NULL;
+    QSerialPort *serial_port = nullptr;
 
 protected:
     void closeEvent( QCloseEvent * event);
@@ -55,13 +55,16 @@ private slots:
     void openChannelSetWidget();
     void openFFTSetWidget();
     void openSTFTWidget();
+    void openConnectSetWidget();
     void openPortSetWidget();
+    void openDebugWidget();
+    void changePwmFreq();
     void openfile();
     void connectWifi();
     void connectToBardDone();
     void getPort();
     void getIp();
-    void changeChannelNumber(int);
+    void changeChannelNumber();
     void changeSampleRate();
     void changeNotchFilter();
     void changeBandFilter();
@@ -82,6 +85,7 @@ private slots:
     void glazerResult();
     void initFFTWidget(bool,double,double,double,double);
     void portSetDone();
+    void updateIniFile();
 
 private:
 
@@ -116,7 +120,7 @@ private:
     bool find_com;
     QPen pen[32];
     QVector<bool>  channel_enable_map;
-    TcpConnect *tcp;
+    CommnicateBoard *tcp;
     SignalProcess *dataProcess;
     QVector<myframe *>  drawframe;
     QVector<QCheckBox *> checkbox;
@@ -125,9 +129,9 @@ private:
 
     Glazer* glazer_window;
     TimeCount* glazertimer;
-    STFT* stft_window = NULL;
+    STFT* stft_window = nullptr;
 
-    qint32 port_bandrate;
+    //qint32 port_bandrate;
 
 };
 //计时功能，继承QThread来实现多线程。

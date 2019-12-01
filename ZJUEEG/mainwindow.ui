@@ -14135,6 +14135,7 @@
     </property>
     <addaction name="setChannel"/>
     <addaction name="setFFT"/>
+    <addaction name="setConnect"/>
    </widget>
    <widget class="QMenu" name="process_menu">
     <property name="title">
@@ -14148,10 +14149,24 @@
     </property>
     <addaction name="set_port"/>
    </widget>
+   <widget class="QMenu" name="pwm_menu">
+    <property name="title">
+     <string>PWM波</string>
+    </property>
+    <addaction name="change_freq"/>
+   </widget>
+   <widget class="QMenu" name="debug_menu">
+    <property name="title">
+     <string>Debug</string>
+    </property>
+    <addaction name="open_debug_win"/>
+   </widget>
    <addaction name="file_menu"/>
    <addaction name="channel_menu"/>
    <addaction name="process_menu"/>
    <addaction name="port_menu"/>
+   <addaction name="pwm_menu"/>
+   <addaction name="debug_menu"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <action name="openfile_action">
@@ -14177,6 +14192,21 @@
   <action name="set_port">
    <property name="text">
     <string>配置</string>
+   </property>
+  </action>
+  <action name="setConnect">
+   <property name="text">
+    <string>连接方式</string>
+   </property>
+  </action>
+  <action name="change_freq">
+   <property name="text">
+    <string>频率修改</string>
+   </property>
+  </action>
+  <action name="open_debug_win">
+   <property name="text">
+    <string>启动Debugchu窗口</string>
    </property>
   </action>
  </widget>
@@ -14561,22 +14591,6 @@
     <hint type="destinationlabel">
      <x>1192</x>
      <y>471</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>comboBox_channel_number</sender>
-   <signal>currentIndexChanged(int)</signal>
-   <receiver>MainWindow</receiver>
-   <slot>changeChannelNumber(int)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>1181</x>
-     <y>171</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>1080</x>
-     <y>184</y>
     </hint>
    </hints>
   </connection>

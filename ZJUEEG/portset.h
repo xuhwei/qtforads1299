@@ -3,6 +3,7 @@
 
 #include <QDialog>
 #include <QSerialPort>
+#include <QSettings>
 
 namespace Ui {
 class PortSet;
@@ -19,6 +20,7 @@ signals:
     void portSetDone();
 private slots:
     void update_arg();
+    void updateIniFile();
 private:
     Ui::PortSet *ui;
     QSerialPort *serial_port;

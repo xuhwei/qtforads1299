@@ -37,7 +37,7 @@ protected:
 private:
     void clearParameter();//窗口大小变化时初始化绘图参数
 
-    QPixmap pixmap;
+    QPixmap *pixmap=nullptr;
     QPointF* polyline;
     QPointF* polyline_2;
     QPointF polyline_first;

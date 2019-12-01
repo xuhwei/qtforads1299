@@ -60,7 +60,7 @@ void STFT::run_m(){
         return;
     }
     sampleRate = ui->sampleRate_Edit->text().toDouble();
-    if(0 == sampleRate){
+    if(50 <= abs(sampleRate)){
         QMessageBox::information(this,"","采样率错误",QMessageBox::Ok);
         return;
     }
@@ -117,7 +117,7 @@ void STFT::run_m(){
 void STFT::decodeFile(unsigned int channel_number){
     //根据文件大小初始化容器
     QFileInfo fileInfo(filePath);
-    int length = fileInfo.size()/144;
+    int length = static_cast<int>(fileInfo.size())/144;
     qDebug("packet number:%d",length);
     data = new Vector<double>(length);
     //data.resize(length);
