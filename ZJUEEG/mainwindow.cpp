@@ -76,12 +76,18 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->electmode_pushButton->setEnabled(false);
     ui->command_lineEdit->setEnabled(false);
     ui->command_send_botton->setEnabled(false);
+    ui->connect_type_label->setText("unconnect");
+    ui->connect_type_label->setStyleSheet("color:rgb(250,0,0)");
 
     readFile = new QFile();
 
     fft_selfControl = true;
     fft_xmin = 0; fft_xmax = 100; fft_ymin = 0; fft_ymax = 1000;
     initFFTWidget(fft_selfControl,fft_xmin,fft_xmax,fft_ymin,fft_ymax);
+
+    command_vector.resize(2);
+    command_vector[0]="";
+    command_vector[1]="";
 
     //链接槽函数
     connect(ui->sampleRate_comboBox,SIGNAL(currentIndexChanged(int)),this,SLOT(changeSampleRate()));
@@ -399,12 +405,19 @@ void MainWindow::connectToBardDone(){
     ui->electmode_pushButton->setEnabled(true);
     ui->command_lineEdit->setEnabled(true);
     ui->command_send_botton->setEnabled(true);
+    if(tcp->m_connect_type == _wifi){
+        ui->connect_type_label->setText("wifi");
+        ui->connect_type_label->setStyleSheet("color:rgb(0,0,0)");
+    }
+    else if(tcp->m_connect_type == _serial_com){
+        ui->connect_type_label->setText("serial_port");
+        ui->connect_type_label->setStyleSheet("color:rgb(0,0,0)");
+    }
 }
 /***************  UI 槽函数***********
  *   更改采样率
  */
 void MainWindow::changeSampleRate(){
-
     int index = 0x90;
     switch(ui->sampleRate_comboBox->currentIndex()){
     case 0: sampleRate = 250.0; index+=6;per_channel_number = 125;break;//50
@@ -417,16 +430,20 @@ void MainWindow::changeSampleRate(){
     default: sampleRate = 1000.0;index+=4;per_channel_number = 250;//200
     }
     ui->statusbar->showMessage("SampleRate: " + QString::number(sampleRate,'f',1)+"Hz");
+    QByteArray data_send;
+    data_send.append(static_cast<char>(0xaa));
+    data_send.append(static_cast<char>(0x03));
+    data_send.append(static_cast<char>(0x01));
+    data_send.append(static_cast<char>(index));
+    command_vector[1] = data_send;
     if(tcp->m_has_start_board){
-        QByteArray data_send;
-        data_send.append(static_cast<char>(0xaa));
-        data_send.append(static_cast<char>(0x03));
-        data_send.append(static_cast<char>(0x01));
-        data_send.append(static_cast<char>(index));
-        tcp->send_to_board(data_send);
+        //command_vector[1] = "";
+        //tcp->send_to_board(data_send);
         tcp->flush();
     }
-
+    //else{
+    //    command_vector[1] = data_send;
+    //}
     //rms_w_count = per_channel_number/rms_w_length;
     dataProcess->setSampleRate(sampleRate);
     dataProcess->setChArg(channel_number,per_channel_number);
@@ -714,7 +731,20 @@ void MainWindow::run_m(){
     else{
         /**************   启动接收 并绘图******************
          */
-
+        if(command_vector[0]!=""){
+            tcp->send_to_board(command_vector[0]);
+            //command_vector[0] = "";
+            QTime timer = QTime::currentTime().addMSecs(150);
+            while( QTime::currentTime() < timer )
+                QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
+        }
+        if(command_vector[1]!=""){
+            tcp->send_to_board(command_vector[1]);
+            //command_vector[1] = "";
+            QTime timer = QTime::currentTime().addMSecs(150);
+            while( QTime::currentTime() < timer )
+                QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
+        }
         QByteArray data_send;
         data_send.append(static_cast<char>(0xaa));
         data_send.append(static_cast<char>(0x06));
@@ -902,20 +932,25 @@ void MainWindow::changeChannelNumber(){
     elect_off_p.resize(channel_number);
     elect_off_n.resize(channel_number);
 
+    // aa 07 通道数
+    // 通道数从1开始，256通道发送0x00
+    int ch_to_send = channel_number;
+    if (ch_to_send == 256){
+        ch_to_send = 0;
+    }
+    QByteArray data_send;
+    data_send.append(static_cast<char>(0xaa));
+    data_send.append(static_cast<char>(0x07));
+    data_send.append(static_cast<char>(ch_to_send));
+    command_vector[0]=data_send;
     if(tcp->m_has_start_board){
-        // aa 07 通道数
-        // 通道数从1开始，256通道发送0x00
-        int ch_to_send = channel_number;
-        if (ch_to_send == 256){
-            ch_to_send = 0;
-        }
-        QByteArray data_send;
-        data_send.append(static_cast<char>(0xaa));
-        data_send.append(static_cast<char>(0x07));
-        data_send.append(static_cast<char>(ch_to_send));
-        tcp->send_to_board(data_send);
+        //command_vector[0]="";
+        //tcp->send_to_board(data_send);
         tcp->flush();
     }
+    //else{
+    //    command_vector[0]=data_send;
+    //}
 }
 /***************  重载X按钮事件***********
  *   实现关闭程序时，如果还连接着板子，则给板子发送停止采集数据指令
@@ -1088,35 +1123,42 @@ void MainWindow::openConnectSetWidget(){
     QString tmpmsg;
     int flag = 0; //1:wifi, 2:serial_com
     if(tcp->m_connect_type == ConnectType::_wifi){
-        tmpmsg = tmpmsg + "目前连接方式是wifi, 将切换为串口。";
+        tmpmsg = tmpmsg + "目前连接方式是wifi, 将重置连接。";
         flag =1;
     }
     else if(tcp->m_connect_type == ConnectType::_serial_com){
-        //tmpmsg = tmpmsg + "目前连接方式是串口, 将切换为wifi。";
-        tmpmsg = tmpmsg + "目前连接方式是wifi, 将切换为串口。";
+        tmpmsg = tmpmsg + "目前连接方式是串口, 将重置连接。";
         flag =2;
     }
     if(QMessageBox::Yes == QMessageBox::question(this,"提示",tmpmsg)){
-        if(flag==1){
-            QByteArray data_send;
-            data_send.append(static_cast<char>(0xaa));
-            data_send.append(static_cast<char>(0x08));
-            data_send.append(static_cast<char>(0x01));
-            tcp->send_to_board(data_send);
+        ui->connect_type_label->setText("unconnect");
+        ui->connect_type_label->setStyleSheet("color:rgb(255,0,0)");
+        delete tcp;
+        tcp = new CommnicateBoard(ip,port,Tcp_server,channel_number,ui->command_return_label);
+        connect(this->tcp,SIGNAL(signal_board_start()),this,SLOT(connectToBardDone()));
+        QMessageBox::information(this,"","已重置连接，请重新连接板子");
+        //if(flag==1){
+            //QByteArray data_send;
+            //data_send.append(static_cast<char>(0xaa));
+            //data_send.append(static_cast<char>(0x08));
+            //data_send.append(static_cast<char>(0x01));
+            //tcp->send_to_board(data_send);
             //delete tcp;
             //tcp = new CommnicateBoard(ip,port,Tcp_server,channel_number,ui->command_return_label);
-            //QMessageBox::information(this,"","已切换至串口，请配置串口");
-        }
-        else if(flag==2){
-            QByteArray data_send;
-            data_send.append(static_cast<char>(0xaa));
-            data_send.append(static_cast<char>(0x08));
-            data_send.append(static_cast<char>(0x02));
-            tcp->send_to_board(data_send);
-            delete tcp;
-            tcp = new CommnicateBoard(ip,port,Tcp_server,channel_number,ui->command_return_label);
-            QMessageBox::information(this,"","已切换至wifi，请执行连接操作");
-        }
+            //connect(this->tcp,SIGNAL(signal_board_start()),this,SLOT(connectToBardDone()));
+            //QMessageBox::information(this,"","已重置连接，请配置串口");
+        //}
+        //else if(flag==2){
+            //QByteArray data_send;
+            //data_send.append(static_cast<char>(0xaa));
+            //data_send.append(static_cast<char>(0x08));
+            //data_send.append(static_cast<char>(0x02));
+            //tcp->send_to_board(data_send);
+            //delete tcp;
+            //tcp = new CommnicateBoard(ip,port,Tcp_server,channel_number,ui->command_return_label);
+            //connect(this->tcp,SIGNAL(signal_board_start()),this,SLOT(connectToBardDone()));
+            //QMessageBox::information(this,"","已重置连接，请连接wifi");
+        //}
     }
 }
 void MainWindow::openPortSetWidget(){
@@ -1153,6 +1195,10 @@ void MainWindow::scanPort(){
 }
 
 void MainWindow::changePwmFreq(){
+    if(!tcp->m_has_start_board){
+        QMessageBox::warning(this,"warning","未连接板子，无法修改");
+        return;
+    }
     QDialog win;
     QHBoxLayout hlayer;
     QLabel label1;

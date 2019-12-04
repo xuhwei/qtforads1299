@@ -126,6 +126,7 @@ private:
     QVector<QCheckBox *> checkbox;
     QFile *readFile;
     QString glazerfilename;
+    QVector<QByteArray> command_vector;//channel_number;sample_rate;
 
     Glazer* glazer_window;
     TimeCount* glazertimer;

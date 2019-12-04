@@ -13319,7 +13319,7 @@
       <item row="0" column="2">
        <layout class="QVBoxLayout" name="verticalLayout" stretch="0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4">
         <item>
-         <layout class="QHBoxLayout" name="horizontalLayout" stretch="1,1,0">
+         <layout class="QHBoxLayout" name="horizontalLayout" stretch="1,1,0,0">
           <item>
            <widget class="QPushButton" name="runButton">
             <property name="sizePolicy">
@@ -13343,6 +13343,13 @@
             </property>
             <property name="text">
              <string>停止</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="connect_type_label">
+            <property name="text">
+             <string/>
             </property>
            </widget>
           </item>

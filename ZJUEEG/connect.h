@@ -16,8 +16,6 @@
 
 #include "debugwidget.h"
 
-//#define MAX_SIZE_COM_BUFFER 192
-
 using namespace std;
 
 enum TcpType{
@@ -61,7 +59,6 @@ public:
      QFile* p_glazerfile= nullptr;  //glazer数据
      QFile* p_debugfile=nullptr;    //调试数据
      QFile* p_processed_file= nullptr; //仅有用数据
-     //DebugWidget *p_debug_widget=nullptr;
      QThread *p_debug_thread = nullptr;
      DebugShow *p_debug_process = nullptr;
 
@@ -76,7 +73,6 @@ public:
      bool m_has_setup_newfile;
      bool m_glazer_on;
      bool m_debug_on;
-     //bool m_com_find_head;
      bool m_find_head;
      int m_packet_size;
      unsigned int m_packet_number_last;
@@ -92,8 +88,6 @@ private:
      TcpType m_tcp_type;
      QString m_ip;
      quint16 m_port;
-     //QThread *p_new_thread = nullptr;
-     //com_commnicate *p_serial_com = nullptr;
 
      void find_head();
 
@@ -105,36 +99,9 @@ private slots:
      void slot_wifi_tcp_server_new_connect();
      void slot_read_data();
      void slot_set_debug_off();
-     //void slot_com_run();
-     //void slot_com_prepare();
 };
-/*
-class com_commnicate: public QDialog
-{
-    Q_OBJECT
-public:
-    com_commnicate(QSerialPort *port, CommnicateBoard *obj){
-        serial_port = port;
-        tcp_obj = obj;
-        m_keep_run = true;
-        //memset(com_buffer,0,MAX_SIZE_COM_BUFFER*sizeof(char));
-        m_packet_number_last = 0;
-    }
-    //void slot_com_run();
-    QSerialPort *serial_port= nullptr;
-public slots:
-    void slot_com_run();
-    void slot_com_prepare();
-private:    
-    CommnicateBoard *tcp_obj= nullptr;
 
-    unsigned int m_packet_number_last;
-    bool m_keep_run;
-    //char com_buffer[MAX_SIZE_COM_BUFFER];
-    DWORD wCount;
-};
-*/
-
+//Debug窗口需要与波形同时显示，需要多线程。这里采用movetoThread的方法。新建一个需要再子线程中运行的类。
 class DebugShow: public QObject
 {
     Q_OBJECT
@@ -150,6 +117,7 @@ public slots:
     void run(){
         p_debug_widget =new DebugWidget(debug_msg_queue);
         p_debug_widget->show();
+        //槽函数链接，debug窗口关闭时，需让线程退出。
         connect(p_debug_widget,SIGNAL(signal_debug_widget_close()),this,SLOT(slot_exit_widget()));
     }
     void slot_exit_widget(){
